@@ -16,4 +16,15 @@ if [ -d "$HOST_CLAUDE" ]; then
   done
 fi
 
+# Start the Docker daemon in the background (DinD).
+if ! pgrep -x dockerd > /dev/null 2>&1; then
+  sudo dockerd --host=unix:///var/run/docker.sock > /tmp/dockerd.log 2>&1 &
+  # Wait until the socket is ready.
+  timeout=15
+  while [ $timeout -gt 0 ] && ! docker info > /dev/null 2>&1; do
+    sleep 1
+    timeout=$((timeout - 1))
+  done
+fi
+
 exec "$@"

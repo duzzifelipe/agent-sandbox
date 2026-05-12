@@ -9,6 +9,7 @@ services:
     container_name: claude-sandbox
     hostname: claude-sandbox
     init: true
+    privileged: true
     stdin_open: true
     tty: true
     environment:
