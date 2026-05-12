@@ -1,0 +1,26 @@
+services:
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TZ: ${TZ:-America/Sao_Paulo}
+    image: claude-sandbox:latest
+    container_name: claude-sandbox
+    hostname: claude-sandbox
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      CLAUDE_CONFIG_DIR: /home/ubuntu/.claude
+    volumes:
+      # Host ~/.claude mounted read-only so entrypoint can seed non-credential
+      # bits (CLAUDE.md memory, settings.json) into the writable volume.
+      - ${HOME}/.claude:/host-claude:ro
+      # Persistent claude state — survives `docker compose run --rm`.
+      # OAuth login (one-time) writes ~/.claude.json + .credentials.json here.
+      - claude-config:/home/ubuntu/.claude
+      - ${CLAUDE_WORKSPACE:-..}:/workspace:delegated
+
+volumes:
+  claude-config:
