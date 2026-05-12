@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       tzdata \
       iptables \
+      postgresql-client \
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
