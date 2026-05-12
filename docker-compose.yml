@@ -22,6 +22,9 @@ services:
       # OAuth login (one-time) writes ~/.claude.json + .credentials.json here.
       - claude-config:/home/ubuntu/.claude
       - ${CLAUDE_WORKSPACE:-..}:/workspace:delegated
+      # Named volume for inner Docker storage — avoids overlayfs-on-overlayfs.
+      - docker-data:/var/lib/docker
 
 volumes:
   claude-config:
+  docker-data:
