@@ -2,14 +2,22 @@ package vault_test
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"testing"
 
 	"github.com/duck-labs/agentsdx-server/internal/vault"
 )
 
 func TestDeriveKey_Deterministic(t *testing.T) {
-	key1 := vault.DeriveKey("mysecret", "profile-a")
-	key2 := vault.DeriveKey("mysecret", "profile-a")
+	key1, err := vault.DeriveKey("mysecret", "profile-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key2, err := vault.DeriveKey("mysecret", "profile-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(key1) != 32 {
 		t.Fatalf("expected 32 bytes, got %d", len(key1))
 	}
@@ -19,15 +27,24 @@ func TestDeriveKey_Deterministic(t *testing.T) {
 }
 
 func TestDeriveKey_ProfileIsolation(t *testing.T) {
-	key1 := vault.DeriveKey("mysecret", "profile-a")
-	key2 := vault.DeriveKey("mysecret", "profile-b")
+	key1, err := vault.DeriveKey("mysecret", "profile-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key2, err := vault.DeriveKey("mysecret", "profile-b")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if bytes.Equal(key1, key2) {
 		t.Fatal("expected different profile names to produce different keys")
 	}
 }
 
 func TestEncryptDecrypt_RoundTrip(t *testing.T) {
-	key := vault.DeriveKey("mysecret", "profile-a")
+	key, err := vault.DeriveKey("mysecret", "profile-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 	plaintext := []byte("hello, agentsdx vault!")
 
 	ciphertext, err := vault.Encrypt(key, plaintext)
@@ -46,7 +63,10 @@ func TestEncryptDecrypt_RoundTrip(t *testing.T) {
 }
 
 func TestEncrypt_ProducesRandomCiphertexts(t *testing.T) {
-	key := vault.DeriveKey("mysecret", "profile-a")
+	key, err := vault.DeriveKey("mysecret", "profile-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 	plaintext := []byte("same plaintext every time")
 
 	ct1, err := vault.Encrypt(key, plaintext)
@@ -64,21 +84,44 @@ func TestEncrypt_ProducesRandomCiphertexts(t *testing.T) {
 }
 
 func TestDecrypt_TamperedCiphertext(t *testing.T) {
-	key := vault.DeriveKey("mysecret", "profile-a")
-	plaintext := []byte("tamper me")
-
-	ciphertext, err := vault.Encrypt(key, plaintext)
+	key, err := vault.DeriveKey("secret", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext := []byte("sensitive data")
+	ct, err := vault.Encrypt(key, plaintext)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	// Flip a byte in the ciphertext portion (after the 12-byte nonce)
-	tampered := make([]byte, len(ciphertext))
-	copy(tampered, ciphertext)
-	tampered[12] ^= 0xFF
+	// Determine nonce size from the cipher
+	block, _ := aes.NewCipher(key)
+	gcm, _ := cipher.NewGCM(block)
+	nonceSize := gcm.NonceSize()
+
+	tampered := make([]byte, len(ct))
+	copy(tampered, ct)
+	tampered[nonceSize] ^= 0xFF // flip first byte of ciphertext body
 
 	_, err = vault.Decrypt(key, tampered)
 	if err == nil {
-		t.Fatal("expected an error when decrypting tampered ciphertext")
+		t.Fatal("expected error decrypting tampered ciphertext")
+	}
+}
+
+func TestDecrypt_ShortInput(t *testing.T) {
+	key, err := vault.DeriveKey("secret", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = vault.Decrypt(key, []byte{})
+	if err == nil {
+		t.Fatal("expected error for empty ciphertext")
+	}
+
+	_, err = vault.Decrypt(key, []byte("short"))
+	if err == nil {
+		t.Fatal("expected error for ciphertext shorter than nonce")
 	}
 }

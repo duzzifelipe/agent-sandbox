@@ -12,15 +12,21 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// hkdfSalt is a fixed application-specific salt used in HKDF key derivation.
+var hkdfSalt = []byte("agentsdx-vault-v1")
+
 // DeriveKey derives a 32-byte AES-256 key from a master secret and a profile-specific
 // context using HKDF-SHA256. Each profile name produces a unique key.
-func DeriveKey(secret, profileName string) []byte {
-	r := hkdf.New(sha256.New, []byte(secret), nil, []byte(profileName))
+func DeriveKey(secret, profileName string) ([]byte, error) {
+	if secret == "" {
+		return nil, fmt.Errorf("vault secret must not be empty")
+	}
+	r := hkdf.New(sha256.New, []byte(secret), hkdfSalt, []byte(profileName))
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(r, key); err != nil {
-		panic(fmt.Sprintf("hkdf derive key: %v", err))
+		return nil, fmt.Errorf("hkdf derive key: %w", err)
 	}
-	return key
+	return key, nil
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM and returns nonce || ciphertext.
