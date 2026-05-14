@@ -1,11 +1,65 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"net/http"
 	"os"
+	"path/filepath"
+
+	"github.com/duck-labs/agentsdx-server/internal/api"
+	"github.com/duck-labs/agentsdx-server/internal/db"
+	"github.com/duck-labs/agentsdx-server/internal/profile"
+	"github.com/duck-labs/agentsdx-server/internal/session"
+	"github.com/duck-labs/agentsdx-server/internal/vm"
 )
 
 func main() {
-	fmt.Fprintln(os.Stderr, "agentsdxd: not yet implemented")
-	os.Exit(1)
+	secret := mustEnv("AGENTSDX_VAULT_SECRET")
+	dataDir := envOrDefault("AGENTSDX_DATA_DIR", "./data")
+	addr := envOrDefault("AGENTSDX_ADDR", ":8080")
+
+	for _, dir := range []struct{ path string; mode os.FileMode }{
+		{filepath.Join(dataDir, "profiles"), 0755},
+		{filepath.Join(dataDir, "vault"), 0700},
+		{filepath.Join(dataDir, "iso"), 0755},
+	} {
+		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
+			log.Fatalf("create data dir %s: %v", dir.path, err)
+		}
+	}
+
+	conn, err := db.Open(filepath.Join(dataDir, "agentsdx.db"))
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	profileStore := profile.NewStore(conn, filepath.Join(dataDir, "profiles"))
+	images := vm.NewImageStore(filepath.Join(dataDir, "images.json"))
+	provider := vm.NewVirtualBoxProvider(images, filepath.Join(dataDir, "iso"))
+
+	sessionStore := session.NewStore(conn)
+	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret)
+
+	h := api.NewHandler(profileStore, mgr, images, filepath.Join(dataDir, "vault"), secret)
+
+	log.Printf("agentsdxd listening on %s", addr)
+	if err := http.ListenAndServe(addr, h.Router()); err != nil {
+		log.Fatalf("listen: %v", err)
+	}
+}
+
+func mustEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		log.Fatalf("required env var %s is not set", key)
+	}
+	return v
+}
+
+func envOrDefault(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
