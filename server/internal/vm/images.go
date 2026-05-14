@@ -6,11 +6,8 @@ import (
 	"os"
 )
 
-// ImageRecord holds built image paths per provider for a single profile.
-type ImageRecord struct {
-	VirtualBox string `json:"virtualbox"`
-	Hetzner    string `json:"hetzner"`
-}
+// ImageRecord maps provider names (e.g. "virtualbox", "hetzner") to their built image paths.
+type ImageRecord map[string]string
 
 // ImageStore reads and writes images.json.
 type ImageStore struct {
@@ -32,10 +29,11 @@ func (s *ImageStore) GetVirtualBoxPath(profileName string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no image record for profile %q", profileName)
 	}
-	if rec.VirtualBox == "" {
+	p := rec["virtualbox"]
+	if p == "" {
 		return "", fmt.Errorf("no virtualbox image built for profile %q", profileName)
 	}
-	return rec.VirtualBox, nil
+	return p, nil
 }
 
 // SetVirtualBoxPath writes or updates the VirtualBox OVA path for profileName.
@@ -48,7 +46,10 @@ func (s *ImageStore) SetVirtualBoxPath(profileName, ovaPath string) error {
 		records = make(map[string]ImageRecord)
 	}
 	rec := records[profileName]
-	rec.VirtualBox = ovaPath
+	if rec == nil {
+		rec = make(ImageRecord)
+	}
+	rec["virtualbox"] = ovaPath
 	records[profileName] = rec
 	return s.save(records)
 }

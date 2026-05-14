@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -26,6 +27,10 @@ func NewVirtualBoxProvider(images *ImageStore, isoDir string) *VirtualBoxProvide
 // attaches a NoCloud ISO with the authorized key, and starts the VM headlessly.
 // The returned VM has State=VMStateStarting; call GetVM to poll until running.
 func (p *VirtualBoxProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM, error) {
+	if _, err := exec.LookPath("VBoxManage"); err != nil {
+		return nil, fmt.Errorf("VBoxManage not found in PATH: VirtualBox must be installed to use the VirtualBox provider")
+	}
+
 	ovaPath, err := p.images.GetVirtualBoxPath(req.ProfileName)
 	if err != nil {
 		return nil, fmt.Errorf("resolve image: %w", err)
