@@ -45,4 +45,17 @@ func TestOpen_InMemory(t *testing.T) {
 		t.Fatalf("Open :memory:: %v", err)
 	}
 	defer conn.Close()
+
+	for _, table := range []string{"profiles", "sessions", "images"} {
+		var count int
+		err := conn.QueryRow(
+			"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table,
+		).Scan(&count)
+		if err != nil {
+			t.Fatalf("check table %s: %v", table, err)
+		}
+		if count != 1 {
+			t.Errorf("table %s not created", table)
+		}
+	}
 }
