@@ -20,7 +20,7 @@ func writeImagesJSON(t *testing.T, dir string, data map[string]vm.ImageRecord) s
 func TestImageStore_GetVirtualBoxPath_Found(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"my-profile": {"virtualbox": "/data/images/my-profile.ova"},
+		"my-profile": {vm.ProviderVirtualBox: "/data/images/my-profile.ova"},
 	})
 
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
@@ -47,7 +47,7 @@ func TestImageStore_GetVirtualBoxPath_NotFound(t *testing.T) {
 func TestImageStore_GetVirtualBoxPath_EmptyPath(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"no-image": {"virtualbox": ""},
+		"no-image": {vm.ProviderVirtualBox: ""},
 	})
 
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
