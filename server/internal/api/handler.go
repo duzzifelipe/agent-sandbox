@@ -1,0 +1,249 @@
+package api
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/duck-labs/agentsdx-server/internal/profile"
+	"github.com/duck-labs/agentsdx-server/internal/session"
+	"github.com/duck-labs/agentsdx-server/internal/vault"
+	"github.com/duck-labs/agentsdx-server/internal/vm"
+	"github.com/duck-labs/agentsdx-shared/types"
+)
+
+// Handler holds all dependencies for the HTTP API.
+type Handler struct {
+	profiles    *profile.Store
+	sessions    *session.Manager
+	images      *vm.ImageStore
+	vaultDir    string
+	vaultSecret string
+}
+
+// NewHandler creates a Handler with the given dependencies.
+func NewHandler(
+	profiles *profile.Store,
+	sessions *session.Manager,
+	images *vm.ImageStore,
+	vaultDir string,
+	vaultSecret string,
+) *Handler {
+	return &Handler{
+		profiles:    profiles,
+		sessions:    sessions,
+		images:      images,
+		vaultDir:    vaultDir,
+		vaultSecret: vaultSecret,
+	}
+}
+
+// Router builds and returns the chi router with all routes registered.
+func (h *Handler) Router() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Recoverer)
+
+	r.Get("/profiles", h.listProfiles)
+	r.Post("/profiles", h.createProfile)
+	r.Get("/profiles/{name}", h.getProfile)
+	r.Put("/profiles/{name}", h.updateProfile)
+	r.Delete("/profiles/{name}", h.deleteProfile)
+	r.Post("/profiles/{name}/credentials", h.setCredentials)
+
+	r.Post("/sessions", h.createSession)
+	r.Get("/sessions/{id}", h.getSession)
+	r.Get("/sessions/{id}/key", h.getSessionKey)
+	r.Post("/sessions/{id}/stop", h.stopSession)
+	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
+
+	r.Post("/images/build", h.buildImage)
+	r.Get("/images", h.listImages)
+
+	return r
+}
+
+func (h *Handler) listProfiles(w http.ResponseWriter, r *http.Request) {
+	specs, err := h.profiles.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, specs)
+}
+
+func (h *Handler) createProfile(w http.ResponseWriter, r *http.Request) {
+	var spec types.ProfileSpec
+	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := h.profiles.Create(spec); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, spec)
+}
+
+func (h *Handler) getProfile(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	spec, err := h.profiles.Get(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, spec)
+}
+
+func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	var spec types.ProfileSpec
+	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	spec.Name = name
+	if err := h.profiles.Delete(name); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err := h.profiles.Create(spec); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, spec)
+}
+
+func (h *Handler) deleteProfile(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if err := h.profiles.Delete(name); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) setCredentials(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	tarball, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body")
+		return
+	}
+
+	agentStatePath := filepath.Join(h.vaultDir, name+"-agent-state.tar")
+	if err := os.WriteFile(agentStatePath, tarball, 0600); err != nil {
+		writeError(w, http.StatusInternalServerError, "store agent state")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
+	var req types.CreateSessionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	id, err := h.sessions.Start(r.Context(), req.ProfileName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp, _ := h.sessions.Get(id)
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	resp, err := h.sessions.Get(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) getSessionKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	resp, err := h.sessions.Get(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	vaultData, err := vault.LoadVaultData(h.vaultDir, resp.Profile, h.vaultSecret)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load vault")
+		return
+	}
+	writeJSON(w, http.StatusOK, types.VMKeyResponse{PrivateKey: vaultData.VMAccessPrivateKey})
+}
+
+func (h *Handler) stopSession(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.sessions.Stop(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) vaultSync(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	resp, err := h.sessions.Get(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	tarball, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body")
+		return
+	}
+
+	key, err := vault.DeriveKey(h.vaultSecret, resp.Profile+"-agent-state")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "derive key")
+		return
+	}
+	encrypted, err := vault.Encrypt(key, tarball)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "encrypt")
+		return
+	}
+	path := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar.enc")
+	if err := os.WriteFile(path, encrypted, 0600); err != nil {
+		writeError(w, http.StatusInternalServerError, "store agent state")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
+	var req types.BuildImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "build triggered", "profile": req.ProfileName})
+}
+
+func (h *Handler) listImages(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, []types.ImageEntry{})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
