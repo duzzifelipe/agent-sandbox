@@ -29,12 +29,16 @@ func (s *Store) profilePath(name string) string {
 
 // Create marshals the spec to YAML, writes it to disk, then inserts a row into SQLite.
 func (s *Store) Create(spec types.ProfileSpec) error {
+	path := s.profilePath(spec.Name)
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("profile %q already exists", spec.Name)
+	}
+
 	data, err := yaml.Marshal(spec)
 	if err != nil {
 		return fmt.Errorf("marshal profile spec: %w", err)
 	}
 
-	path := s.profilePath(spec.Name)
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("write profile yaml: %w", err)
 	}
@@ -72,7 +76,7 @@ func (s *Store) List() ([]types.ProfileSpec, error) {
 	}
 	defer rows.Close()
 
-	var specs []types.ProfileSpec
+	specs := make([]types.ProfileSpec, 0)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -91,15 +95,14 @@ func (s *Store) List() ([]types.ProfileSpec, error) {
 	return specs, nil
 }
 
-// Delete removes the SQLite row and YAML file for the named profile.
+// Delete removes the YAML file and SQLite row for the named profile.
 func (s *Store) Delete(name string) error {
-	_, err := s.db.Exec(`DELETE FROM profiles WHERE name = ?`, name)
-	if err != nil {
-		return fmt.Errorf("delete profile from sqlite: %w", err)
+	if err := os.Remove(s.profilePath(name)); err != nil {
+		return fmt.Errorf("delete profile yaml: %w", err)
 	}
 
-	if err := os.Remove(s.profilePath(name)); err != nil {
-		return fmt.Errorf("remove profile yaml: %w", err)
+	if _, err := s.db.Exec("DELETE FROM profiles WHERE name = ?", name); err != nil {
+		return fmt.Errorf("delete profile from db: %w", err)
 	}
 
 	return nil

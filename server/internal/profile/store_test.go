@@ -1,7 +1,6 @@
 package profile_test
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -11,9 +10,9 @@ import (
 	"github.com/duck-labs/agentsdx-shared/types"
 )
 
-func sampleSpec() types.ProfileSpec {
+func sampleSpec(name string) types.ProfileSpec {
 	return types.ProfileSpec{
-		Name: "test-profile",
+		Name: name,
 		Infrastructure: types.InfrastructureConfig{
 			Provider: "virtualbox",
 			Image:    "ubuntu-24.04",
@@ -41,7 +40,7 @@ func newStore(t *testing.T) *profile.Store {
 
 func TestStore_Create_WritesYAMLAndSQLite(t *testing.T) {
 	s := newStore(t)
-	spec := sampleSpec()
+	spec := sampleSpec("test-profile")
 
 	if err := s.Create(spec); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -68,7 +67,7 @@ func TestStore_Create_WritesYAMLAndSQLite(t *testing.T) {
 
 func TestStore_Get_ReadsFromYAML(t *testing.T) {
 	s := newStore(t)
-	spec := sampleSpec()
+	spec := sampleSpec("test-profile")
 
 	if err := s.Create(spec); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -87,9 +86,8 @@ func TestStore_Get_ReadsFromYAML(t *testing.T) {
 func TestStore_List_ReturnsAllProfiles(t *testing.T) {
 	s := newStore(t)
 
-	spec1 := sampleSpec()
-	spec2 := sampleSpec()
-	spec2.Name = "second-profile"
+	spec1 := sampleSpec("test-profile")
+	spec2 := sampleSpec("second-profile")
 
 	if err := s.Create(spec1); err != nil {
 		t.Fatalf("Create spec1: %v", err)
@@ -120,7 +118,7 @@ func TestStore_List_ReturnsAllProfiles(t *testing.T) {
 
 func TestStore_Delete_RemovesYAMLAndSQLite(t *testing.T) {
 	s := newStore(t)
-	spec := sampleSpec()
+	spec := sampleSpec("test-profile")
 
 	if err := s.Create(spec); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -150,52 +148,24 @@ func TestStore_Delete_RemovesYAMLAndSQLite(t *testing.T) {
 }
 
 func TestStore_Create_FailsOnDuplicate(t *testing.T) {
-	s := newStore(t)
-	spec := sampleSpec()
+	store := newStore(t)
+	spec := sampleSpec("dup-profile")
 
-	if err := s.Create(spec); err != nil {
-		t.Fatalf("first Create: %v", err)
+	if err := store.Create(spec); err != nil {
+		t.Fatalf("first Create failed: %v", err)
 	}
 
-	// Remove the YAML file so the second attempt can write it, but SQLite will fail.
-	// Actually we want to test the duplicate error; YAML os.WriteFile will succeed
-	// (it overwrites), and SQLite INSERT will fail due to PRIMARY KEY constraint.
-	err := s.Create(spec)
+	err := store.Create(spec)
 	if err == nil {
-		t.Error("second Create with duplicate name: expected error, got nil")
+		t.Fatal("expected error on duplicate Create, got nil")
 	}
 
-	// After the failed second Create, the YAML file was cleaned up (best-effort).
-	// The SQLite row from the first Create remains.
-	// List will attempt to read the YAML and will fail, which is acceptable behaviour.
-	// What we verify here is only that the error was returned.
-	_ = err // error confirmed non-nil above
-}
-
-// Ensure YAML file cleanup works when we simulate a scenario where the file
-// is written but we want to confirm it's removed on SQL failure.
-func TestStore_Create_CleansUpYAMLOnSQLFailure(t *testing.T) {
-	s := newStore(t)
-	spec := sampleSpec()
-
-	// First create succeeds.
-	if err := s.Create(spec); err != nil {
-		t.Fatalf("first Create: %v", err)
+	// Original profile must still be intact
+	got, err := store.Get(spec.Name)
+	if err != nil {
+		t.Fatalf("Get after failed duplicate Create: %v", err)
 	}
-
-	// Second create: YAML will be overwritten, then SQL fails, YAML gets cleaned up.
-	// After cleanup, the original YAML would be gone. This is the expected behaviour
-	// documented in the spec (best-effort cleanup).
-	err := s.Create(spec)
-	if err == nil {
-		t.Error("expected error on duplicate, got nil")
-	}
-
-	// The YAML file was cleaned up (removed) after the SQL failure.
-	// So Get should fail.
-	yamlPath := filepath.Join(t.TempDir(), spec.Name+".yaml")
-	_, statErr := os.Stat(yamlPath)
-	if !os.IsNotExist(statErr) && statErr == nil {
-		t.Error("expected YAML file to not exist at temp path")
+	if !reflect.DeepEqual(spec, got) {
+		t.Errorf("original profile corrupted after duplicate Create attempt")
 	}
 }
