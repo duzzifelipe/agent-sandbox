@@ -1,0 +1,6 @@
+# Go build artifacts
+cli/agentsdx
+server/agentsdxd
+
+# Data directory (runtime state)
+data/
