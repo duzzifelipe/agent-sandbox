@@ -6,10 +6,15 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/hkdf"
+
+	"github.com/duck-labs/agentsdx-shared/types"
 )
 
 // hkdfSalt is a fixed application-specific salt used in HKDF key derivation.
@@ -66,4 +71,50 @@ func Decrypt(key, ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("gcm open: %w", err)
 	}
 	return plaintext, nil
+}
+
+// vaultPath returns the path to the encrypted vault file for a given profile.
+func vaultPath(dir, profileName string) string {
+	return filepath.Join(dir, profileName+".vault.enc")
+}
+
+// StoreVaultData JSON-marshals data, encrypts it, and writes it to the vault directory.
+func StoreVaultData(dir, profileName, secret string, data types.VaultData) error {
+	plaintext, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("store vault data: marshal: %w", err)
+	}
+	key, err := DeriveKey(secret, profileName)
+	if err != nil {
+		return fmt.Errorf("store vault data: derive key: %w", err)
+	}
+	encrypted, err := Encrypt(key, plaintext)
+	if err != nil {
+		return fmt.Errorf("store vault data: encrypt: %w", err)
+	}
+	if err := os.WriteFile(vaultPath(dir, profileName), encrypted, 0600); err != nil {
+		return fmt.Errorf("store vault data: write file: %w", err)
+	}
+	return nil
+}
+
+// LoadVaultData reads and decrypts an encrypted vault file, returning the VaultData.
+func LoadVaultData(dir, profileName, secret string) (types.VaultData, error) {
+	encrypted, err := os.ReadFile(vaultPath(dir, profileName))
+	if err != nil {
+		return types.VaultData{}, fmt.Errorf("load vault data: read file: %w", err)
+	}
+	key, err := DeriveKey(secret, profileName)
+	if err != nil {
+		return types.VaultData{}, fmt.Errorf("load vault data: derive key: %w", err)
+	}
+	plaintext, err := Decrypt(key, encrypted)
+	if err != nil {
+		return types.VaultData{}, fmt.Errorf("load vault data: decrypt: %w", err)
+	}
+	var data types.VaultData
+	if err := json.Unmarshal(plaintext, &data); err != nil {
+		return types.VaultData{}, fmt.Errorf("load vault data: unmarshal: %w", err)
+	}
+	return data, nil
 }
