@@ -11,6 +11,7 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-chi/chi/v5 v5.2.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kdomanski/iso9660 v0.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
