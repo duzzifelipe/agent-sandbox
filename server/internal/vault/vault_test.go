@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"reflect"
 	"testing"
 
 	"github.com/duck-labs/agentsdx-server/internal/vault"
@@ -149,25 +150,8 @@ func TestStoreAndLoadVaultData_RoundTrip(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	if loaded.GitPrivateKey != original.GitPrivateKey {
-		t.Errorf("GitPrivateKey: got %q, want %q", loaded.GitPrivateKey, original.GitPrivateKey)
-	}
-	if loaded.GitPublicKey != original.GitPublicKey {
-		t.Errorf("GitPublicKey: got %q, want %q", loaded.GitPublicKey, original.GitPublicKey)
-	}
-	if loaded.VMAccessPrivateKey != original.VMAccessPrivateKey {
-		t.Errorf("VMAccessPrivateKey: got %q, want %q", loaded.VMAccessPrivateKey, original.VMAccessPrivateKey)
-	}
-	if loaded.VMAccessPublicKey != original.VMAccessPublicKey {
-		t.Errorf("VMAccessPublicKey: got %q, want %q", loaded.VMAccessPublicKey, original.VMAccessPublicKey)
-	}
-	if len(loaded.AgentStatePaths) != len(original.AgentStatePaths) {
-		t.Fatalf("AgentStatePaths length: got %d, want %d", len(loaded.AgentStatePaths), len(original.AgentStatePaths))
-	}
-	for i, p := range original.AgentStatePaths {
-		if loaded.AgentStatePaths[i] != p {
-			t.Errorf("AgentStatePaths[%d]: got %q, want %q", i, loaded.AgentStatePaths[i], p)
-		}
+	if !reflect.DeepEqual(original, loaded) {
+		t.Errorf("loaded VaultData does not match original:\ngot:  %+v\nwant: %+v", loaded, original)
 	}
 }
 
