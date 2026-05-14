@@ -1,0 +1,9 @@
+services:
+  agentsdx:
+    image: ghcr.io/duck-labs/agentsdx-server:latest
+    volumes:
+      - ./data:/data
+    environment:
+      AGENTSDX_VAULT_SECRET: "${AGENTSDX_VAULT_SECRET}"
+    ports:
+      - "8080:8080"
