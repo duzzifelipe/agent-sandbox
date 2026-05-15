@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/duck-labs/agentsdx-shared/types"
 )
 
 // Provider identifies a VM backend.
@@ -60,6 +62,27 @@ func (s *ImageStore) SetVirtualBoxPath(profileName, ovaPath string) error {
 	rec[ProviderVirtualBox] = ovaPath
 	records[profileName] = rec
 	return s.save(records)
+}
+
+// List returns all image entries from images.json.
+// Returns an empty slice if the file does not exist yet.
+func (s *ImageStore) List() ([]types.ImageEntry, error) {
+	records, err := s.load()
+	if os.IsNotExist(err) {
+		return []types.ImageEntry{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load images: %w", err)
+	}
+	entries := make([]types.ImageEntry, 0, len(records))
+	for profileName, rec := range records {
+		entries = append(entries, types.ImageEntry{
+			ProfileName: profileName,
+			VirtualBox:  rec[ProviderVirtualBox],
+			Hetzner:     rec[ProviderHetzner],
+		})
+	}
+	return entries, nil
 }
 
 func (s *ImageStore) load() (map[string]ImageRecord, error) {
