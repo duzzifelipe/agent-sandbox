@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -247,8 +248,9 @@ func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		//nolint:errcheck
-		h.builder.BuildVirtualBox(context.Background(), spec)
+		if _, err := h.builder.BuildVirtualBox(context.Background(), spec); err != nil {
+			log.Printf("buildImage: profile %s: %v", name, err)
+		}
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": name})
 }
