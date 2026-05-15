@@ -14,14 +14,12 @@ variable "vm_name" {
 
 variable "iso_url" {
   type        = string
-  default     = "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"
-  description = "URL or local path to the Ubuntu 24.04 server ISO"
+  description = "URL or local path to the Ubuntu server ISO — must be supplied by the caller (see server/internal/builder/builder.go isoRegistry)"
 }
 
 variable "iso_checksum" {
   type        = string
-  default     = "sha256:d6dab0c4cb67c685bf41e4585fd426b4b90cb0a8b5db7c90a9e5f84e8e1e1b0e"
-  description = "sha256:<hex> checksum — verify at https://releases.ubuntu.com/24.04.2/SHA256SUMS"
+  description = "sha256:<hex> checksum for iso_url — must be supplied by the caller (see server/internal/builder/builder.go isoRegistry)"
 }
 
 variable "provision_script" {
