@@ -2,6 +2,7 @@ package builder
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,11 +18,13 @@ type fakeRunner struct {
 	capturedArgs []string
 	orchContent  string
 	err          error
+	readErr      error
 }
 
 func (f *fakeRunner) Run(_ context.Context, _ string, args []string) error {
 	f.capturedArgs = args
-	data, _ := os.ReadFile(filepath.Join(f.vmDir, "orchestrate.sh"))
+	data, err := os.ReadFile(filepath.Join(f.vmDir, "orchestrate.sh"))
+	f.readErr = err
 	f.orchContent = string(data)
 	return f.err
 }
@@ -147,6 +150,10 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 		t.Fatalf("BuildVirtualBox: %v", err)
 	}
 
+	if fake.readErr != nil {
+		t.Fatalf("fakeRunner failed to read orchestrate.sh: %v", fake.readErr)
+	}
+
 	argsStr := strings.Join(fake.capturedArgs, " ")
 
 	if !strings.Contains(argsStr, "-var=iso_url=https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso") {
@@ -157,6 +164,43 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 	}
 	if !strings.Contains(argsStr, "-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh") {
 		t.Errorf("expected provision_script arg, got args: %v", fake.capturedArgs)
+	}
+}
+
+func TestBuildVirtualBox_PackerFailure_ReturnsError(t *testing.T) {
+	vmDir := t.TempDir()
+	outputDir := t.TempDir()
+	imagesPath := filepath.Join(t.TempDir(), "images.json")
+	imageStore := vm.NewImageStore(imagesPath)
+
+	fake := &fakeRunner{
+		vmDir: vmDir,
+		err:   errors.New("packer failed"),
+	}
+	b := &Builder{
+		vmDir:     vmDir,
+		outputDir: outputDir,
+		images:    imageStore,
+		runner:    fake,
+	}
+
+	profile := types.ProfileSpec{
+		Name: "failure-profile",
+		Infrastructure: types.InfrastructureConfig{
+			Image:   "ubuntu-24.04",
+			Tooling: []string{},
+		},
+		Agent: types.AgentConfig{
+			Provider: "claude",
+		},
+	}
+
+	_, err := b.BuildVirtualBox(context.Background(), profile)
+	if err == nil {
+		t.Fatal("expected error from packer failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "packer build") {
+		t.Errorf("expected 'packer build' in error message, got: %v", err)
 	}
 }
 

@@ -132,7 +132,7 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 		fmt.Sprintf("-var=vm_name=%s", profile.Name),
 		fmt.Sprintf("-var=iso_url=%s", iso.URL),
 		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
-		fmt.Sprintf("-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh"),
+		"-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh",
 		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
 		"virtualbox.pkr.hcl",
 	}
