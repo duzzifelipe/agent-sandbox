@@ -28,6 +28,7 @@ type SessionRecord struct {
 	Profile   string
 	State     string
 	IPAddress string
+	VMID      string
 }
 
 // Create inserts a new session in pending state and returns the generated ID.
@@ -47,8 +48,8 @@ func (s *Store) Create(profileName string) (string, error) {
 func (s *Store) Get(id string) (SessionRecord, error) {
 	var rec SessionRecord
 	err := s.db.QueryRow(
-		`SELECT id, profile_name, state, COALESCE(ip_address, '') FROM sessions WHERE id = ?`, id,
-	).Scan(&rec.ID, &rec.Profile, &rec.State, &rec.IPAddress)
+		`SELECT id, profile_name, state, COALESCE(ip_address, ''), COALESCE(vm_id, '') FROM sessions WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.Profile, &rec.State, &rec.IPAddress, &rec.VMID)
 	if err == sql.ErrNoRows {
 		return rec, fmt.Errorf("session %q not found", id)
 	}
@@ -56,6 +57,22 @@ func (s *Store) Get(id string) (SessionRecord, error) {
 		return rec, fmt.Errorf("query session: %w", err)
 	}
 	return rec, nil
+}
+
+// UpdateVMID sets the vm_id of a session.
+func (s *Store) UpdateVMID(id, vmID string) error {
+	res, err := s.db.Exec(
+		`UPDATE sessions SET vm_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		vmID, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update session vm_id: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("session %q not found", id)
+	}
+	return nil
 }
 
 // UpdateState sets the state and ip_address of a session.

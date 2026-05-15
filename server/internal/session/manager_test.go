@@ -111,4 +111,7 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	if rec.State != types.SessionStateDestroyed {
 		t.Errorf("State after stop: got %q, want %q", rec.State, types.SessionStateDestroyed)
 	}
+	if len(fakeProvider.vms) != 0 {
+		t.Errorf("expected DestroyVM to be called: fakeProvider.vms has %d entries, want 0", len(fakeProvider.vms))
+	}
 }

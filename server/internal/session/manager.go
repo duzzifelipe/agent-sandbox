@@ -66,6 +66,7 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 		return "", fmt.Errorf("create vm: %w", err)
 	}
 
+	_ = m.store.UpdateVMID(id, v.ID)
 	_ = m.store.UpdateState(id, types.SessionStateStarting, "")
 	go m.pollUntilRunning(id, v.ID)
 	return id, nil
@@ -78,6 +79,11 @@ func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("get session: %w", err)
 	}
 	_ = m.store.UpdateState(sessionID, types.SessionStateStopping, rec.IPAddress)
+	if rec.VMID != "" {
+		if err := m.provider.DestroyVM(ctx, rec.VMID); err != nil {
+			log.Printf("session %s: DestroyVM error: %v", sessionID, err)
+		}
+	}
 	_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
 	return nil
 }
