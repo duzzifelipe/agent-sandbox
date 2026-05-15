@@ -22,20 +22,21 @@ type Manager struct {
 	provider    vm.VMProvider
 	vaultDir    string
 	vaultSecret string
+	serverURL   string
 }
 
 // NewManager creates a Manager.
-func NewManager(store *Store, provider vm.VMProvider, vaultDir, vaultSecret string) *Manager {
+func NewManager(store *Store, provider vm.VMProvider, vaultDir, vaultSecret, serverURL string) *Manager {
 	return &Manager{
 		store:       store,
 		provider:    provider,
 		vaultDir:    vaultDir,
 		vaultSecret: vaultSecret,
+		serverURL:   serverURL,
 	}
 }
 
 // Start creates a session, launches the VM, and returns the session ID immediately.
-// VM polling and state updates happen in a background goroutine.
 func (m *Manager) Start(ctx context.Context, profileName string) (string, error) {
 	vaultData, err := vault.LoadVaultData(m.vaultDir, profileName, m.vaultSecret)
 	if err != nil {
@@ -50,7 +51,13 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 	createReq := vm.CreateVMRequest{
 		ProfileName:   profileName,
 		AuthorizedKey: vaultData.VMAccessPublicKey,
-		UserData:      vm.NoCloudUserData(vaultData.VMAccessPublicKey),
+		UserData: vm.BuildUserData(
+			vaultData.VMAccessPublicKey,
+			vaultData.GitPrivateKey,
+			id,
+			m.serverURL,
+			profileName,
+		),
 	}
 
 	v, err := m.provider.CreateVM(ctx, createReq)
@@ -60,20 +67,16 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 	}
 
 	_ = m.store.UpdateState(id, types.SessionStateStarting, "")
-
 	go m.pollUntilRunning(id, v.ID)
 	return id, nil
 }
 
 // Stop transitions the session to destroying and marks it destroyed.
-// For MVP, the VM ID is not stored in the sessions table, so actual VM destruction
-// is handled via vault-sync + external orchestration. A vm_id column will be added later.
 func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 	rec, err := m.store.Get(sessionID)
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
 	}
-
 	_ = m.store.UpdateState(sessionID, types.SessionStateStopping, rec.IPAddress)
 	_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
 	return nil
@@ -93,8 +96,6 @@ func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 	}, nil
 }
 
-// pollUntilRunning polls GetVM until the VM is running, then updates session state.
-// It polls immediately on first iteration to avoid waiting the full interval for fast VMs.
 func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 	defer cancel()
@@ -111,7 +112,6 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 		if err != nil {
 			log.Printf("session %s: GetVM error: %v", sessionID, err)
 		}
-
 		select {
 		case <-ctx.Done():
 			log.Printf("session %s: timed out waiting for VM to start", sessionID)

@@ -2,6 +2,7 @@ package vm_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/duck-labs/agentsdx-server/internal/vm"
@@ -17,7 +18,6 @@ func TestWriteNoCloudISO_CreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteNoCloudISO: %v", err)
 	}
-
 	if _, err := os.Stat(isoPath); err != nil {
 		t.Fatalf("ISO file not found: %v", err)
 	}
@@ -25,25 +25,19 @@ func TestWriteNoCloudISO_CreatesFile(t *testing.T) {
 
 func TestWriteNoCloudISO_ContainsFiles(t *testing.T) {
 	dir := t.TempDir()
-	metaData := "instance-id: abc\nlocal-hostname: my-vm\n"
-	userData := "#cloud-config\npackages:\n  - git\n"
-
-	isoPath, err := vm.WriteNoCloudISO(dir, metaData, userData)
+	isoPath, err := vm.WriteNoCloudISO(dir, "instance-id: abc\n", "#cloud-config\n")
 	if err != nil {
 		t.Fatalf("WriteNoCloudISO: %v", err)
 	}
-
 	f, err := os.Open(isoPath)
 	if err != nil {
 		t.Fatalf("open ISO: %v", err)
 	}
 	defer f.Close()
-
 	img, err := iso9660.OpenImage(f)
 	if err != nil {
 		t.Fatalf("open iso9660 image: %v", err)
 	}
-
 	root, err := img.RootDir()
 	if err != nil {
 		t.Fatalf("root dir: %v", err)
@@ -52,7 +46,6 @@ func TestWriteNoCloudISO_ContainsFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get children: %v", err)
 	}
-
 	names := make(map[string]bool)
 	for _, c := range children {
 		names[c.Name()] = true
@@ -61,5 +54,31 @@ func TestWriteNoCloudISO_ContainsFiles(t *testing.T) {
 		if !names[want] {
 			t.Errorf("ISO missing file %q; got names: %v", want, names)
 		}
+	}
+}
+
+func TestBuildUserData_ContainsSSHKey(t *testing.T) {
+	ud := vm.BuildUserData("ssh-rsa AAAA...", "-----BEGIN OPENSSH PRIVATE KEY-----\nABC\n-----END OPENSSH PRIVATE KEY-----", "sess-1", "http://server:8080", "myprofile")
+	if !strings.Contains(ud, "ssh-rsa AAAA...") {
+		t.Errorf("user-data missing authorized key")
+	}
+	if !strings.Contains(ud, "/root/.ssh/id_rsa") {
+		t.Errorf("user-data missing id_rsa write_files entry")
+	}
+}
+
+func TestBuildUserData_ContainsEnvFile(t *testing.T) {
+	ud := vm.BuildUserData("ssh-rsa AAAA...", "git-key", "sess-42", "http://server:8080", "work-backend")
+	if !strings.Contains(ud, "/etc/agentsdx.env") {
+		t.Errorf("user-data missing agentsdx.env write_files entry")
+	}
+	if !strings.Contains(ud, "AGENTSDX_SERVER_URL=http://server:8080") {
+		t.Errorf("user-data missing AGENTSDX_SERVER_URL")
+	}
+	if !strings.Contains(ud, "AGENTSDX_SESSION_ID=sess-42") {
+		t.Errorf("user-data missing AGENTSDX_SESSION_ID")
+	}
+	if !strings.Contains(ud, "AGENTSDX_PROFILE=work-backend") {
+		t.Errorf("user-data missing AGENTSDX_PROFILE")
 	}
 }

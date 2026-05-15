@@ -35,7 +35,7 @@ func newHandler(t *testing.T) (*api.Handler, string) {
 	images := vm.NewImageStore(filepath.Join(dir, "images.json"))
 
 	fakeProvider := &fakeVM{}
-	mgr := session.NewManager(sessionStore, fakeProvider, dir, "test-secret")
+	mgr := session.NewManager(sessionStore, fakeProvider, dir, "test-secret", "")
 
 	h := api.NewHandler(profileStore, mgr, images, dir, "test-secret")
 	return h, dir

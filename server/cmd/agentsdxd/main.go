@@ -17,6 +17,7 @@ func main() {
 	secret := mustEnv("AGENTSDX_VAULT_SECRET")
 	dataDir := envOrDefault("AGENTSDX_DATA_DIR", "./data")
 	addr := envOrDefault("AGENTSDX_ADDR", ":8080")
+	serverURL := envOrDefault("AGENTSDX_SERVER_URL", "http://localhost"+addr)
 
 	for _, dir := range []struct{ path string; mode os.FileMode }{
 		{filepath.Join(dataDir, "profiles"), 0755},
@@ -39,7 +40,7 @@ func main() {
 	provider := vm.NewVirtualBoxProvider(images, filepath.Join(dataDir, "iso"))
 
 	sessionStore := session.NewStore(conn)
-	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret)
+	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret, serverURL)
 
 	h := api.NewHandler(profileStore, mgr, images, filepath.Join(dataDir, "vault"), secret)
 

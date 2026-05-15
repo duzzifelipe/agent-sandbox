@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +11,6 @@ import (
 )
 
 // WriteNoCloudISO creates a NoCloud data source ISO at dir/nocloud.iso.
-// The ISO has volume label "cidata" and contains meta-data and user-data files.
-// Returns the absolute path to the generated ISO.
 func WriteNoCloudISO(dir, metaData, userData string) (string, error) {
 	writer, err := iso9660.NewWriter()
 	if err != nil {
@@ -44,7 +43,25 @@ func NoCloudMetaData(instanceID string) string {
 	return fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", instanceID, instanceID)
 }
 
-// NoCloudUserData returns cloud-init user-data that installs an SSH authorized key.
-func NoCloudUserData(authorizedKey string) string {
-	return fmt.Sprintf("#cloud-config\nssh_authorized_keys:\n  - %s\n", authorizedKey)
+// BuildUserData returns cloud-init user-data that:
+//   - registers the VM access authorized key
+//   - writes /root/.ssh/id_rsa (git private key, base64-encoded to avoid YAML issues)
+//   - writes /etc/agentsdx.env with session context for entrypoint.sh
+func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
+	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
+	return fmt.Sprintf(`#cloud-config
+ssh_authorized_keys:
+  - %s
+write_files:
+  - path: /root/.ssh/id_rsa
+    permissions: '0600'
+    encoding: b64
+    content: %s
+  - path: /etc/agentsdx.env
+    permissions: '0600'
+    content: |
+      AGENTSDX_SERVER_URL=%s
+      AGENTSDX_SESSION_ID=%s
+      AGENTSDX_PROFILE=%s
+`, authorizedKey, encodedKey, serverURL, sessionID, profileName)
 }
