@@ -4,15 +4,18 @@ package vault
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"golang.org/x/crypto/hkdf"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/duck-labs/agentsdx-shared/types"
 )
@@ -76,6 +79,30 @@ func Decrypt(key, ciphertext []byte) ([]byte, error) {
 // vaultPath returns the path to the encrypted vault file for a given profile.
 func vaultPath(dir, profileName string) string {
 	return filepath.Join(dir, profileName+".vault.enc")
+}
+
+// VaultExists reports whether an encrypted vault file exists for the given profile.
+func VaultExists(dir, profileName string) bool {
+	_, err := os.Stat(vaultPath(dir, profileName))
+	return err == nil
+}
+
+// GenerateKeyPair generates an ed25519 SSH key pair.
+// Returns the private key in OpenSSH PEM format and the public key in authorized_keys format.
+func GenerateKeyPair() (privateKeyPEM, publicKeyOpenSSH string, err error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", fmt.Errorf("generate ed25519 key: %w", err)
+	}
+	privBlock, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return "", "", fmt.Errorf("marshal private key: %w", err)
+	}
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return "", "", fmt.Errorf("new ssh public key: %w", err)
+	}
+	return string(pem.EncodeToMemory(privBlock)), string(ssh.MarshalAuthorizedKey(sshPub)), nil
 }
 
 // StoreVaultData JSON-marshals data, encrypts it, and writes it to the vault directory.

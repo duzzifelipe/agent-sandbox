@@ -52,6 +52,11 @@ source "virtualbox-iso" "vm" {
   ssh_timeout      = "30m"
   shutdown_command = "shutdown -P now"
 
+  # Upload the VirtualBox Guest Additions ISO from the host before provisioners run.
+  # Guest Additions are required for guestproperty IP discovery used by the server.
+  guest_additions_mode = "upload"
+  guest_additions_path = "/tmp/VBoxGuestAdditions.iso"
+
   http_content = {
     "/user-data" = file("${path.root}/autoinstall/user-data.yaml")
     "/meta-data" = ""
@@ -77,6 +82,18 @@ source "virtualbox-iso" "vm" {
 
 build {
   sources = ["source.virtualbox-iso.vm"]
+
+  # Install Guest Additions first — required for IP discovery via guestproperty.
+  provisioner "shell" {
+    inline = [
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get install -y linux-headers-$(uname -r) build-essential dkms perl",
+      "mount -o loop /tmp/VBoxGuestAdditions.iso /mnt",
+      "/mnt/VBoxLinuxAdditions.run --nox11",
+      "umount /mnt",
+      "rm -f /tmp/VBoxGuestAdditions.iso"
+    ]
+  }
 
   provisioner "file" {
     source      = "${path.root}/"

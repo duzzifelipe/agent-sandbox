@@ -146,6 +146,29 @@ func (h *Handler) setCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bootstrap vault with SSH keys on first call; leave existing keys untouched on subsequent calls.
+	if !vault.VaultExists(h.vaultDir, name) {
+		vmPriv, vmPub, err := vault.GenerateKeyPair()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "generate vm key pair")
+			return
+		}
+		gitPriv, gitPub, err := vault.GenerateKeyPair()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "generate git key pair")
+			return
+		}
+		vd := types.DefaultVaultData()
+		vd.VMAccessPrivateKey = vmPriv
+		vd.VMAccessPublicKey = vmPub
+		vd.GitPrivateKey = gitPriv
+		vd.GitPublicKey = gitPub
+		if err := vault.StoreVaultData(h.vaultDir, name, h.vaultSecret, vd); err != nil {
+			writeError(w, http.StatusInternalServerError, "store vault")
+			return
+		}
+	}
+
 	agentStatePath := filepath.Join(h.vaultDir, name+"-agent-state.tar")
 	if err := os.WriteFile(agentStatePath, tarball, 0600); err != nil {
 		writeError(w, http.StatusInternalServerError, "store agent state")
