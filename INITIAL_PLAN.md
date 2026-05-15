@@ -350,3 +350,5 @@ agentsdx sync <profile> <file>      # push a local file into the running VM via 
 - Running local models on specialized hardware attached to the VM
 - Community-contributed profile templates
 - Additional VM providers (AWS EC2, GCP Compute Engine, DigitalOcean)
+- App that renders the terminal on mobile and provides a way to even speech to interact to it
+- Use golang migrate and sqlc to manage server queries and even allow the usage of pgsql to replace sqlite;
