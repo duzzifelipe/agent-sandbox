@@ -1,0 +1,28 @@
+#cloud-config
+autoinstall:
+  version: 1
+  apt:
+    geoip: false
+    primary:
+      - arches: [amd64, i386]
+        uri: http://archive.ubuntu.com/ubuntu
+  identity:
+    hostname: agentsdx-vm
+    # Password for the initial ubuntu user (only used during installation).
+    # Generated with: openssl passwd -6 -salt agentsdx packer
+    password: "$6$agentsdx$PdaBPJ26WILQpxH5VohtB6dm7w.h/wSBHfJy/cnFdfapv/whsQTGiQAknkFbvMLZWF3ctZTgu9Je.iuikGKQ0/"
+    username: ubuntu
+    realname: ubuntu
+  ssh:
+    allow-pw: true
+    install-server: true
+  storage:
+    layout:
+      name: direct
+  user-data:
+    disable_root: false
+  late-commands:
+    # Set root password so Packer can SSH in as root to run provisioners.
+    - "echo 'root:packer' | chpasswd --root /target"
+    - "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /target/etc/ssh/sshd_config"
+    - "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /target/etc/ssh/sshd_config"
