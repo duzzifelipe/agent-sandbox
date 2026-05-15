@@ -69,7 +69,9 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 				"-i", keyFile.Name(),
 				"-o", "StrictHostKeyChecking=no",
 				"-o", "UserKnownHostsFile=/dev/null",
+				"-t",
 				fmt.Sprintf("root@%s", session.IPAddress),
+				"/usr/local/bin/entrypoint.sh",
 			}
 
 			fmt.Printf("Connecting: %s\n", sshArgs[len(sshArgs)-1])

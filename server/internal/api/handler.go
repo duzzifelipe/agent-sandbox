@@ -72,7 +72,7 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/sessions/{id}/stop", h.stopSession)
 	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
 
-	r.Post("/images/build/{profile}", h.buildImage)
+	r.Post("/images/build", h.buildImage)
 	r.Get("/images", h.listImages)
 
 	return r
@@ -237,22 +237,22 @@ func (h *Handler) vaultSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "profile")
-	spec, err := h.profiles.Get(name)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+	var req types.BuildImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if spec.Infrastructure.Provider != "virtualbox" {
-		writeError(w, http.StatusBadRequest, "only virtualbox provider is supported at MVP")
+	spec, err := h.profiles.Get(req.ProfileName)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "profile not found")
 		return
 	}
 	go func() {
 		if _, err := h.builder.BuildVirtualBox(context.Background(), spec); err != nil {
-			log.Printf("buildImage: profile %s: %v", name, err)
+			log.Printf("buildImage: profile %s: %v", req.ProfileName, err)
 		}
 	}()
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": name})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": req.ProfileName})
 }
 
 func (h *Handler) listImages(w http.ResponseWriter, r *http.Request) {

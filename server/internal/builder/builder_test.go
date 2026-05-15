@@ -90,7 +90,7 @@ func TestComposeScripts_WithTooling(t *testing.T) {
 func TestWriteOrchestrationScript_ContainsBashCalls(t *testing.T) {
 	scripts := []string{"/path/one", "/path/two"}
 
-	scriptPath, err := writeOrchestrationScript(scripts)
+	scriptPath, err := writeOrchestrationScript(scripts, "claude")
 	if err != nil {
 		t.Fatalf("writeOrchestrationScript: %v", err)
 	}
@@ -110,6 +110,15 @@ func TestWriteOrchestrationScript_ContainsBashCalls(t *testing.T) {
 	}
 	if !strings.Contains(content, `bash "/path/two"`) {
 		t.Errorf("expected script to contain bash call for /path/two, content: %q", content)
+	}
+	if !strings.Contains(content, "/usr/local/bin/entrypoint.sh") {
+		t.Errorf("expected script to copy entrypoint.sh, content: %q", content)
+	}
+	if !strings.Contains(content, "/usr/local/bin/vault-sync.sh") {
+		t.Errorf("expected script to copy vault-sync.sh, content: %q", content)
+	}
+	if !strings.Contains(content, "agents/claude/entrypoint.sh") {
+		t.Errorf("expected script to reference claude entrypoint, content: %q", content)
 	}
 }
 

@@ -155,11 +155,13 @@ func TestBuildImage_Accepted(t *testing.T) {
 		t.Fatalf("POST /profiles: got %d — %s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/images/build/dev", nil)
+	buildBody, _ := json.Marshal(types.BuildImageRequest{ProfileName: "dev"})
+	req = httptest.NewRequest(http.MethodPost, "/images/build", bytes.NewReader(buildBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	h.Router().ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
-		t.Fatalf("POST /images/build/dev: got %d — %s", rec.Code, rec.Body.String())
+		t.Fatalf("POST /images/build: got %d — %s", rec.Code, rec.Body.String())
 	}
 	var result map[string]string
 	json.NewDecoder(rec.Body).Decode(&result)

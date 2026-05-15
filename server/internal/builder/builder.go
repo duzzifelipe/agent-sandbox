@@ -72,11 +72,15 @@ set -euo pipefail
 {{range .Scripts}}
 bash "{{.}}"
 {{end}}
+cp "/tmp/agentsdx-vm/agents/{{.Agent}}/entrypoint.sh" /usr/local/bin/entrypoint.sh
+cp /tmp/agentsdx-vm/vault-sync.sh /usr/local/bin/vault-sync.sh
+chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/vault-sync.sh
 `
 
-// writeOrchestrationScript writes a temp bash script that calls each provision
-// script in order. Returns the script path; caller must delete it.
-func writeOrchestrationScript(scripts []string) (string, error) {
+// writeOrchestrationScript writes a temp bash script that runs all provision
+// scripts in order and copies the agent entrypoint and vault-sync into the image.
+// Returns the script path; caller must delete it.
+func writeOrchestrationScript(scripts []string, agentProvider string) (string, error) {
 	f, err := os.CreateTemp("", "agentsdx-orchestrate-*.sh")
 	if err != nil {
 		return "", fmt.Errorf("create temp script: %w", err)
@@ -87,7 +91,10 @@ func writeOrchestrationScript(scripts []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse template: %w", err)
 	}
-	data := struct{ Scripts []string }{Scripts: scripts}
+	data := struct {
+		Scripts []string
+		Agent   string
+	}{Scripts: scripts, Agent: agentProvider}
 	if err := tmpl.Execute(f, data); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)
 	}
@@ -107,7 +114,7 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 	}
 
 	scripts := composeScripts(profile)
-	orchScript, err := writeOrchestrationScript(scripts)
+	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
 	if err != nil {
 		return "", err
 	}
