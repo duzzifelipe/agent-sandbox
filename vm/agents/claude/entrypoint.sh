@@ -37,7 +37,7 @@ STATE_FILE="$(mktemp /tmp/agent-state-XXXXXX.tar)"
 HTTP_STATUS=$(curl -s -o "$STATE_FILE" -w "%{http_code}" \
     "${AGENTSDX_SERVER_URL}/sessions/${AGENTSDX_SESSION_ID}/agent-state")
 if [[ "$HTTP_STATUS" == "200" ]] && [[ -s "$STATE_FILE" ]]; then
-    tar -xf "$STATE_FILE" -C /root/ 2>/dev/null || true
+    tar -xf "$STATE_FILE" -C /root/ || echo "warning: vault restore failed, starting fresh"
 fi
 rm -f "$STATE_FILE"
 

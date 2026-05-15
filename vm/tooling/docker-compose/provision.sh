@@ -3,8 +3,9 @@
 set -euo pipefail
 
 COMPOSE_VERSION="v2.35.0"
+ARCH=$(uname -m)
 curl -fsSL \
-  "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+  "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${ARCH}" \
   -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
