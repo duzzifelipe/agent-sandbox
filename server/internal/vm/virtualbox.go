@@ -53,7 +53,7 @@ func (p *VirtualBoxProvider) CreateVM(ctx context.Context, req CreateVMRequest) 
 	isoPath, err := WriteNoCloudISO(
 		p.isoDir,
 		NoCloudMetaData(vmName),
-		NoCloudUserData(req.AuthorizedKey),
+		req.UserData,
 	)
 	if err != nil {
 		_ = p.forceDelete(ctx, vmName)

@@ -62,7 +62,7 @@ func TestManager_StartSession_CreatesSession(t *testing.T) {
 		t.Fatalf("StoreVaultData: %v", err)
 	}
 
-	mgr := session.NewManager(store, newFakeVM(), vaultDir, vaultSecret)
+	mgr := session.NewManager(store, newFakeVM(), vaultDir, vaultSecret, "")
 	id, err := mgr.Start(context.Background(), "dev")
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -98,7 +98,7 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	vault.StoreVaultData(vaultDir, "dev", vaultSecret, vaultData)
 
 	fakeProvider := newFakeVM()
-	mgr := session.NewManager(store, fakeProvider, vaultDir, vaultSecret)
+	mgr := session.NewManager(store, fakeProvider, vaultDir, vaultSecret, "")
 
 	id, _ := mgr.Start(context.Background(), "dev")
 	time.Sleep(100 * time.Millisecond)
@@ -110,5 +110,8 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	rec, _ := store.Get(id)
 	if rec.State != types.SessionStateDestroyed {
 		t.Errorf("State after stop: got %q, want %q", rec.State, types.SessionStateDestroyed)
+	}
+	if len(fakeProvider.vms) != 0 {
+		t.Errorf("expected DestroyVM to be called: fakeProvider.vms has %d entries, want 0", len(fakeProvider.vms))
 	}
 }

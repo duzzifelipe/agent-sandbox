@@ -74,3 +74,41 @@ func TestImageStore_SetVirtualBoxPath(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "/data/images/my-profile.ova")
 	}
 }
+
+func TestImageStore_List_Empty(t *testing.T) {
+	dir := t.TempDir()
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+	entries, err := store.List()
+	if err != nil {
+		t.Fatalf("List on missing file: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(entries))
+	}
+}
+
+func TestImageStore_List_ReturnsAll(t *testing.T) {
+	dir := t.TempDir()
+	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
+		"profile-a": {vm.ProviderVirtualBox: "/data/images/a.ova"},
+		"profile-b": {vm.ProviderVirtualBox: "/data/images/b.ova"},
+	})
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+	entries, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	seen := make(map[string]string)
+	for _, e := range entries {
+		seen[e.ProfileName] = e.VirtualBox
+	}
+	if seen["profile-a"] != "/data/images/a.ova" {
+		t.Errorf("profile-a: got %q", seen["profile-a"])
+	}
+	if seen["profile-b"] != "/data/images/b.ova" {
+		t.Errorf("profile-b: got %q", seen["profile-b"])
+	}
+}

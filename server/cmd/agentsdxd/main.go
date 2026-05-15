@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/duck-labs/agentsdx-server/internal/api"
+	"github.com/duck-labs/agentsdx-server/internal/builder"
 	"github.com/duck-labs/agentsdx-server/internal/db"
 	"github.com/duck-labs/agentsdx-server/internal/profile"
 	"github.com/duck-labs/agentsdx-server/internal/session"
@@ -17,11 +18,15 @@ func main() {
 	secret := mustEnv("AGENTSDX_VAULT_SECRET")
 	dataDir := envOrDefault("AGENTSDX_DATA_DIR", "./data")
 	addr := envOrDefault("AGENTSDX_ADDR", ":8080")
+	serverURL := envOrDefault("AGENTSDX_SERVER_URL", "http://localhost"+addr)
+
+	vmDir := envOrDefault("AGENTSDX_VM_DIR", "./vm")
 
 	for _, dir := range []struct{ path string; mode os.FileMode }{
 		{filepath.Join(dataDir, "profiles"), 0755},
 		{filepath.Join(dataDir, "vault"), 0700},
 		{filepath.Join(dataDir, "iso"), 0755},
+		{filepath.Join(dataDir, "images"), 0755},
 	} {
 		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
 			log.Fatalf("create data dir %s: %v", dir.path, err)
@@ -39,9 +44,11 @@ func main() {
 	provider := vm.NewVirtualBoxProvider(images, filepath.Join(dataDir, "iso"))
 
 	sessionStore := session.NewStore(conn)
-	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret)
+	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret, serverURL)
 
-	h := api.NewHandler(profileStore, mgr, images, filepath.Join(dataDir, "vault"), secret)
+	imageBuilder := builder.New(vmDir, filepath.Join(dataDir, "images"), images)
+
+	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 
 	log.Printf("agentsdxd listening on %s", addr)
 	if err := http.ListenAndServe(addr, h.Router()); err != nil {

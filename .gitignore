@@ -1,3 +1,6 @@
+# Git worktrees
+.wortrees/
+
 # Go build artifacts
 cli/agentsdx
 server/agentsdxd

@@ -50,6 +50,7 @@ func migrate(conn *sql.DB) error {
         profile_name TEXT NOT NULL,
         state TEXT NOT NULL,
         ip_address TEXT,
+        vm_id TEXT NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (profile_name) REFERENCES profiles(name)
