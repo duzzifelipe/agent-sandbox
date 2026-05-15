@@ -44,14 +44,18 @@ func NoCloudMetaData(instanceID string) string {
 }
 
 // BuildUserData returns cloud-init user-data that:
+//   - runs mkdir to ensure /root/.ssh/ exists before write_files
 //   - registers the VM access authorized key
 //   - writes /root/.ssh/id_rsa (git private key, base64-encoded to avoid YAML issues)
 //   - writes /etc/agentsdx.env with session context for entrypoint.sh
 func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
 	return fmt.Sprintf(`#cloud-config
+bootcmd:
+  - mkdir -p /root/.ssh
+  - chmod 700 /root/.ssh
 ssh_authorized_keys:
-  - %s
+  - "%s"
 write_files:
   - path: /root/.ssh/id_rsa
     permissions: '0600'
