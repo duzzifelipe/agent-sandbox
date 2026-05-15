@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,11 +18,17 @@ import (
 	"github.com/duck-labs/agentsdx-shared/types"
 )
 
+// ImageBuilder is the interface for building VM images.
+type ImageBuilder interface {
+	BuildVirtualBox(ctx context.Context, profile types.ProfileSpec) (string, error)
+}
+
 // Handler holds all dependencies for the HTTP API.
 type Handler struct {
 	profiles    *profile.Store
 	sessions    *session.Manager
 	images      *vm.ImageStore
+	builder     ImageBuilder
 	vaultDir    string
 	vaultSecret string
 }
@@ -31,6 +38,7 @@ func NewHandler(
 	profiles *profile.Store,
 	sessions *session.Manager,
 	images *vm.ImageStore,
+	builder ImageBuilder,
 	vaultDir string,
 	vaultSecret string,
 ) *Handler {
@@ -38,6 +46,7 @@ func NewHandler(
 		profiles:    profiles,
 		sessions:    sessions,
 		images:      images,
+		builder:     builder,
 		vaultDir:    vaultDir,
 		vaultSecret: vaultSecret,
 	}
@@ -58,10 +67,11 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/sessions", h.createSession)
 	r.Get("/sessions/{id}", h.getSession)
 	r.Get("/sessions/{id}/key", h.getSessionKey)
+	r.Get("/sessions/{id}/agent-state", h.getAgentState)
 	r.Post("/sessions/{id}/stop", h.stopSession)
 	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
 
-	r.Post("/images/build", h.buildImage)
+	r.Post("/images/build/{profile}", h.buildImage)
 	r.Get("/images", h.listImages)
 
 	return r
@@ -226,16 +236,70 @@ func (h *Handler) vaultSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
-	var req types.BuildImageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+	name := chi.URLParam(r, "profile")
+	spec, err := h.profiles.Get(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "build triggered", "profile": req.ProfileName})
+	if spec.Infrastructure.Provider != "virtualbox" {
+		writeError(w, http.StatusBadRequest, "only virtualbox provider is supported at MVP")
+		return
+	}
+	go func() {
+		//nolint:errcheck
+		h.builder.BuildVirtualBox(context.Background(), spec)
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": name})
 }
 
 func (h *Handler) listImages(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []types.ImageEntry{})
+	entries, err := h.images.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+func (h *Handler) getAgentState(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	resp, err := h.sessions.Get(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// Try encrypted agent state first (from vault-sync).
+	encPath := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar.enc")
+	if encData, err := os.ReadFile(encPath); err == nil {
+		key, err := vault.DeriveKey(h.vaultSecret, resp.Profile+"-agent-state")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "derive key")
+			return
+		}
+		plaintext, err := vault.Decrypt(key, encData)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "decrypt agent state")
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(plaintext)
+		return
+	}
+
+	// Fall back to plain agent state tarball (from setCredentials).
+	rawPath := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar")
+	if rawData, err := os.ReadFile(rawPath); err == nil {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(rawData)
+		return
+	}
+
+	// No agent state yet.
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -26,6 +26,10 @@ func newHandler(t *testing.T) (*api.Handler, string) {
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
+	// Disable journaling in tests so no journal files are left behind in TempDir
+	// after background goroutines (e.g. pollUntilRunning) write to SQLite.
+	conn.SetMaxOpenConns(1)
+	conn.Exec("PRAGMA journal_mode=OFF")
 	t.Cleanup(func() { conn.Close() })
 
 	_ = os.MkdirAll(filepath.Join(dir, "profiles"), 0755)
@@ -37,8 +41,19 @@ func newHandler(t *testing.T) (*api.Handler, string) {
 	fakeProvider := &fakeVM{}
 	mgr := session.NewManager(sessionStore, fakeProvider, dir, "test-secret", "")
 
-	h := api.NewHandler(profileStore, mgr, images, dir, "test-secret")
+	h := api.NewHandler(profileStore, mgr, images, &fakeBuilder{}, dir, "test-secret")
 	return h, dir
+}
+
+// fakeBuilder satisfies api.ImageBuilder for handler tests.
+type fakeBuilder struct {
+	profile string
+	err     error
+}
+
+func (f *fakeBuilder) BuildVirtualBox(_ context.Context, p types.ProfileSpec) (string, error) {
+	f.profile = p.Name
+	return "/tmp/fake.ova", f.err
 }
 
 // fakeVM satisfies vm.VMProvider for handler tests.
@@ -115,5 +130,146 @@ func TestHandler_CreateSession(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&resp)
 	if resp.ID == "" {
 		t.Error("expected non-empty session ID in response")
+	}
+}
+
+func TestBuildImage_Accepted(t *testing.T) {
+	h, dir := newHandler(t)
+
+	conn, _ := db.Open(filepath.Join(dir, "test.db"))
+	conn.Exec("INSERT INTO profiles (name, spec) VALUES (?, ?)", "dev", `{"name":"dev","infrastructure":{"provider":"virtualbox","image":"ubuntu-24.04"}}`)
+	conn.Close()
+
+	// Create the profile in the profile store via the API.
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /profiles: got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/images/build/dev", nil)
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST /images/build/dev: got %d — %s", rec.Code, rec.Body.String())
+	}
+	var result map[string]string
+	json.NewDecoder(rec.Body).Decode(&result)
+	if result["status"] != "building" {
+		t.Errorf("expected status=building, got %q", result["status"])
+	}
+	if result["profile"] != "dev" {
+		t.Errorf("expected profile=dev, got %q", result["profile"])
+	}
+}
+
+func TestListImages_Empty(t *testing.T) {
+	h, _ := newHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/images", nil)
+	rec := httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /images: got %d — %s", rec.Code, rec.Body.String())
+	}
+	var entries []types.ImageEntry
+	json.NewDecoder(rec.Body).Decode(&entries)
+	if len(entries) != 0 {
+		t.Errorf("expected empty array, got %v", entries)
+	}
+}
+
+func TestGetAgentState_NoState(t *testing.T) {
+	h, dir := newHandler(t)
+
+	// Create profile and session.
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+
+	vault.StoreVaultData(dir, "dev", "test-secret", types.VaultData{VMAccessPublicKey: "ssh-rsa AAAA..."})
+
+	body, _ = json.Marshal(types.CreateSessionRequest{ProfileName: "dev"})
+	req = httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /sessions: got %d — %s", rec.Code, rec.Body.String())
+	}
+	var sessResp types.SessionResponse
+	json.NewDecoder(rec.Body).Decode(&sessResp)
+
+	req = httptest.NewRequest(http.MethodGet, "/sessions/"+sessResp.ID+"/agent-state", nil)
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("GET /sessions/{id}/agent-state: got %d, want 204 — %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetAgentState_ReturnsVaultData(t *testing.T) {
+	h, dir := newHandler(t)
+
+	// Create profile and session.
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+
+	vault.StoreVaultData(dir, "dev", "test-secret", types.VaultData{VMAccessPublicKey: "ssh-rsa AAAA..."})
+
+	body, _ = json.Marshal(types.CreateSessionRequest{ProfileName: "dev"})
+	req = httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /sessions: got %d — %s", rec.Code, rec.Body.String())
+	}
+	var sessResp types.SessionResponse
+	json.NewDecoder(rec.Body).Decode(&sessResp)
+
+	// Write a fake agent state tarball via vault-sync.
+	agentStateBytes := []byte("fake-tar-content")
+	body = agentStateBytes
+	req = httptest.NewRequest(http.MethodPost, "/sessions/"+sessResp.ID+"/vault-sync", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("POST /sessions/{id}/vault-sync: got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/sessions/"+sessResp.ID+"/agent-state", nil)
+	rec = httptest.NewRecorder()
+	h.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /sessions/{id}/agent-state: got %d, want 200 — %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/octet-stream" {
+		t.Errorf("expected Content-Type application/octet-stream, got %q", ct)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), agentStateBytes) {
+		t.Errorf("expected %q, got %q", agentStateBytes, rec.Body.Bytes())
 	}
 }
