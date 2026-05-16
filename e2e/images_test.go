@@ -22,6 +22,8 @@ func TestBuildImage(t *testing.T) {
 }
 
 // waitForImage polls GET /images until the named profile has a non-empty virtualbox path.
+// Defined here (e2e && vm) because sessions_test.go (e2e && vm) depends on it.
+// Do not move to helpers_test.go (e2e only) — it would be excluded from the vm build.
 func waitForImage(t *testing.T, profile string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

@@ -109,6 +109,8 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
+// freePort picks an available TCP port. There is a small TOCTOU window between
+// closing the listener here and the server binding the port — acceptable for local use.
 func freePort() (int, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
