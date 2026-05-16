@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -11,11 +13,20 @@ import (
 )
 
 func newCreateCmd(c *client.Client) *cobra.Command {
-	return &cobra.Command{
+	var specFile string
+	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new sandbox profile interactively",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			spec, err := runWizard()
+			var (
+				spec types.ProfileSpec
+				err  error
+			)
+			if specFile != "" {
+				spec, err = readSpecFile(specFile)
+			} else {
+				spec, err = runWizard()
+			}
 			if err != nil {
 				return err
 			}
@@ -26,6 +37,20 @@ func newCreateCmd(c *client.Client) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&specFile, "spec-file", "", "path to a JSON profile spec (skips interactive wizard)")
+	return cmd
+}
+
+func readSpecFile(path string) (types.ProfileSpec, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return types.ProfileSpec{}, fmt.Errorf("read spec file: %w", err)
+	}
+	var spec types.ProfileSpec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return types.ProfileSpec{}, fmt.Errorf("parse spec file: %w", err)
+	}
+	return spec, nil
 }
 
 func runWizard() (types.ProfileSpec, error) {
