@@ -18,9 +18,15 @@ func TestSessionLifecycle(t *testing.T) {
 
 	// Upload credentials (needed for vault bootstrap).
 	claudeDir := filepath.Join(homeDir, ".claude")
-	os.MkdirAll(claudeDir, 0755)
-	os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{}`), 0644)
-	os.WriteFile(filepath.Join(homeDir, ".claude.json"), []byte(`{"oauthToken":"test"}`), 0644)
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write settings.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, ".claude.json"), []byte(`{"oauthToken":"test"}`), 0644); err != nil {
+		t.Fatalf("write .claude.json: %v", err)
+	}
 	_, _, code = runCLI("credentials", "set", "e2e-session")
 	assertExitCode(t, code, 0)
 
