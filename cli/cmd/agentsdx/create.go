@@ -16,7 +16,7 @@ func newCreateCmd(c *client.Client) *cobra.Command {
 	var specFile string
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new sandbox profile interactively",
+		Short: "Create a new sandbox profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var (
 				spec types.ProfileSpec
