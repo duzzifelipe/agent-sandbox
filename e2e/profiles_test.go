@@ -8,9 +8,11 @@ import (
 	"testing"
 )
 
+// TestProfileLifecycle exercises profile create → list → delete → list in order.
+// Subtests are sequential and state-dependent — do not add t.Parallel() to any of them.
 func TestProfileLifecycle(t *testing.T) {
 	specFile := writeProfileSpec(t, "e2e-lifecycle")
-	t.Cleanup(func() { apiDELETE(t, "/profiles/e2e-lifecycle") })
+	t.Cleanup(func() { apiDELETE(t, "/profiles/e2e-lifecycle") }) // safety net if delete subtest doesn't run
 
 	t.Run("create", func(t *testing.T) {
 		stdout, stderr, code := runCLI("create", "--spec-file", specFile)
@@ -78,6 +80,8 @@ func writeProfileSpec(t *testing.T, name string) string {
 	if _, err := f.Write(data); err != nil {
 		t.Fatalf("write spec file: %v", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatalf("close spec file: %v", err)
+	}
 	return f.Name()
 }
