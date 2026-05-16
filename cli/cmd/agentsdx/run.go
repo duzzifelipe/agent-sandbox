@@ -14,7 +14,8 @@ import (
 )
 
 func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
-	return &cobra.Command{
+	var noConnect bool
+	cmd := &cobra.Command{
 		Use:   "run <profile>",
 		Short: "Start a sandbox session and open an SSH connection",
 		Args:  cobra.ExactArgs(1),
@@ -37,6 +38,11 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 				return err
 			}
 			fmt.Println()
+
+			if noConnect {
+				fmt.Printf("VM running at %s (session %s).\n", session.IPAddress, session.ID)
+				return nil
+			}
 
 			fmt.Printf("VM running at %s. Fetching SSH key...\n", session.IPAddress)
 			privateKey, err := c.GetSessionKey(session.ID)
@@ -78,6 +84,8 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 			return syscall.Exec(sshBin, sshArgs, os.Environ())
 		},
 	}
+	cmd.Flags().BoolVar(&noConnect, "no-connect", false, "exit after VM starts instead of opening SSH (useful for scripting)")
+	return cmd
 }
 
 func waitForRunning(c *client.Client, sessionID string) (types.SessionResponse, error) {
