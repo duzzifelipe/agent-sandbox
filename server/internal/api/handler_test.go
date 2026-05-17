@@ -66,6 +66,7 @@ func (f *fakeVM) DestroyVM(_ context.Context, _ string) error { return nil }
 func (f *fakeVM) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	return &vm.VM{ID: vmID, State: vm.VMStateRunning, IPAddress: "192.168.56.1"}, nil
 }
+func (f *fakeVM) RegisterIP(_ context.Context, _, _ string) error { return nil }
 
 func TestHandler_CreateAndListProfiles(t *testing.T) {
 	h, _ := newHandler(t)

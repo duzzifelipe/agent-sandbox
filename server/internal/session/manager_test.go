@@ -48,6 +48,8 @@ func (f *fakeVM) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	return v, nil
 }
 
+func (f *fakeVM) RegisterIP(_ context.Context, _, _ string) error { return nil }
+
 func TestManager_StartSession_CreatesSession(t *testing.T) {
 	store := newStore(t)
 	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "dev")

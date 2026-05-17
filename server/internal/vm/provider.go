@@ -7,6 +7,7 @@ type VMProvider interface {
 	CreateVM(ctx context.Context, req CreateVMRequest) (*VM, error)
 	DestroyVM(ctx context.Context, vmID string) error
 	GetVM(ctx context.Context, vmID string) (*VM, error)
+	RegisterIP(ctx context.Context, vmID, ip string) error
 }
 
 type CreateVMRequest struct {

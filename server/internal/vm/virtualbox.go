@@ -112,6 +112,11 @@ func (p *VirtualBoxProvider) GetVM(ctx context.Context, vmID string) (*VM, error
 	return v, nil
 }
 
+// RegisterIP is a no-op for VirtualBox; IP is discovered via Guest Additions.
+func (p *VirtualBoxProvider) RegisterIP(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func (p *VirtualBoxProvider) forceDelete(ctx context.Context, vmID string) error {
 	// Try graceful poweroff first; ignore errors (VM may already be off)
 	_, _ = runVBoxManage(ctx, "controlvm", vmID, "poweroff")
