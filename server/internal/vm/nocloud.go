@@ -43,14 +43,11 @@ func NoCloudMetaData(instanceID string) string {
 	return fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", instanceID, instanceID)
 }
 
-// BuildUserData returns cloud-init user-data that:
-//   - runs mkdir to ensure /root/.ssh/ exists before write_files
-//   - registers the VM access authorized key
-//   - writes /root/.ssh/id_rsa (git private key, base64-encoded to avoid YAML issues)
-//   - writes /etc/agentsdx.env with session context for entrypoint.sh
-func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
+// BuildUserData returns cloud-init user-data. When vmCallbackURL is non-empty,
+// a runcmd block is added that POSTs the VM's IP to that URL after boot.
+func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName, vmCallbackURL string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
-	return fmt.Sprintf(`#cloud-config
+	ud := fmt.Sprintf(`#cloud-config
 bootcmd:
   - mkdir -p /root/.ssh
   - chmod 700 /root/.ssh
@@ -68,4 +65,15 @@ write_files:
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
 `, authorizedKey, encodedKey, serverURL, sessionID, profileName)
+
+	if vmCallbackURL != "" {
+		ud += fmt.Sprintf(`runcmd:
+  - |
+    IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+    curl -sf -X POST %s \
+      -H 'Content-Type: application/json' \
+      -d "{\"ip\":\"$IP\"}"
+`, vmCallbackURL)
+	}
+	return ud
 }

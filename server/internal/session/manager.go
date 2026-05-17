@@ -57,6 +57,7 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 			id,
 			m.serverURL,
 			profileName,
+			m.serverURL+"/sessions/"+id+"/ip",
 		),
 	}
 

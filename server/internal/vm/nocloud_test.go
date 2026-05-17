@@ -58,7 +58,7 @@ func TestWriteNoCloudISO_ContainsFiles(t *testing.T) {
 }
 
 func TestBuildUserData_ContainsSSHKey(t *testing.T) {
-	ud := vm.BuildUserData("ssh-rsa AAAA...", "-----BEGIN OPENSSH PRIVATE KEY-----\nABC\n-----END OPENSSH PRIVATE KEY-----", "sess-1", "http://server:8080", "myprofile")
+	ud := vm.BuildUserData("ssh-rsa AAAA...", "-----BEGIN OPENSSH PRIVATE KEY-----\nABC\n-----END OPENSSH PRIVATE KEY-----", "sess-1", "http://server:8080", "myprofile", "")
 	if !strings.Contains(ud, "ssh-rsa AAAA...") {
 		t.Errorf("user-data missing authorized key")
 	}
@@ -68,7 +68,7 @@ func TestBuildUserData_ContainsSSHKey(t *testing.T) {
 }
 
 func TestBuildUserData_ContainsEnvFile(t *testing.T) {
-	ud := vm.BuildUserData("ssh-rsa AAAA...", "git-key", "sess-42", "http://server:8080", "work-backend")
+	ud := vm.BuildUserData("ssh-rsa AAAA...", "git-key", "sess-42", "http://server:8080", "work-backend", "")
 	if !strings.Contains(ud, "/etc/agentsdx.env") {
 		t.Errorf("user-data missing agentsdx.env write_files entry")
 	}
@@ -80,5 +80,30 @@ func TestBuildUserData_ContainsEnvFile(t *testing.T) {
 	}
 	if !strings.Contains(ud, "AGENTSDX_PROFILE=work-backend") {
 		t.Errorf("user-data missing AGENTSDX_PROFILE")
+	}
+}
+
+func TestBuildUserData_ContainsCallbackRuncmd(t *testing.T) {
+	ud := vm.BuildUserData(
+		"ssh-rsa AAAA...", "git-key", "sess-1",
+		"http://server:8080", "myprofile",
+		"http://server:8080/sessions/sess-1/ip",
+	)
+	if !strings.Contains(ud, "runcmd") {
+		t.Errorf("user-data missing runcmd section")
+	}
+	if !strings.Contains(ud, "http://server:8080/sessions/sess-1/ip") {
+		t.Errorf("user-data missing callback URL in runcmd")
+	}
+}
+
+func TestBuildUserData_NoCallbackWhenURLEmpty(t *testing.T) {
+	ud := vm.BuildUserData(
+		"ssh-rsa AAAA...", "git-key", "sess-1",
+		"http://server:8080", "myprofile",
+		"",
+	)
+	if strings.Contains(ud, "runcmd") {
+		t.Errorf("user-data should not contain runcmd when vmCallbackURL is empty")
 	}
 }
