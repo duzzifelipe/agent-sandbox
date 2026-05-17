@@ -140,6 +140,19 @@ func TestImageStore_GetAppleVZPath_NotFound(t *testing.T) {
 	}
 }
 
+func TestImageStore_GetAppleVZPath_EmptyPath(t *testing.T) {
+	dir := t.TempDir()
+	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
+		"no-image": {vm.ProviderAppleVZ: ""},
+	})
+
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+	_, err := store.GetAppleVZPath("no-image")
+	if err == nil {
+		t.Fatal("expected error for empty applevz path")
+	}
+}
+
 func TestImageStore_SetAppleVZPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "images.json")
