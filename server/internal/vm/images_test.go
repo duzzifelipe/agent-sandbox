@@ -112,3 +112,48 @@ func TestImageStore_List_ReturnsAll(t *testing.T) {
 		t.Errorf("profile-b: got %q", seen["profile-b"])
 	}
 }
+
+func TestImageStore_GetAppleVZPath_Found(t *testing.T) {
+	dir := t.TempDir()
+	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
+		"my-profile": {vm.ProviderAppleVZ: "/data/images/my-profile.img"},
+	})
+
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+	path, err := store.GetAppleVZPath("my-profile")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "/data/images/my-profile.img" {
+		t.Errorf("got %q, want %q", path, "/data/images/my-profile.img")
+	}
+}
+
+func TestImageStore_GetAppleVZPath_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	writeImagesJSON(t, dir, map[string]vm.ImageRecord{})
+
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+	_, err := store.GetAppleVZPath("missing")
+	if err == nil {
+		t.Fatal("expected error for missing profile")
+	}
+}
+
+func TestImageStore_SetAppleVZPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "images.json")
+	store := vm.NewImageStore(path)
+
+	if err := store.SetAppleVZPath("my-profile", "/data/images/my-profile.img"); err != nil {
+		t.Fatalf("SetAppleVZPath: %v", err)
+	}
+
+	got, err := store.GetAppleVZPath("my-profile")
+	if err != nil {
+		t.Fatalf("GetAppleVZPath after set: %v", err)
+	}
+	if got != "/data/images/my-profile.img" {
+		t.Errorf("got %q, want %q", got, "/data/images/my-profile.img")
+	}
+}

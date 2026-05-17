@@ -31,4 +31,5 @@ type ImageEntry struct {
 	ProfileName string `json:"profile_name"`
 	VirtualBox  string `json:"virtualbox"`
 	Hetzner     string `json:"hetzner"`
+	AppleVZ     string `json:"applevz"`
 }

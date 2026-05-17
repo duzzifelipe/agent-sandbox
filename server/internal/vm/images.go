@@ -14,6 +14,7 @@ type Provider string
 const (
 	ProviderVirtualBox Provider = "virtualbox"
 	ProviderHetzner    Provider = "hetzner"
+	ProviderAppleVZ    Provider = "applevz"
 )
 
 // ImageRecord maps a Provider to its built image path for a single profile.
@@ -64,6 +65,41 @@ func (s *ImageStore) SetVirtualBoxPath(profileName, ovaPath string) error {
 	return s.save(records)
 }
 
+// GetAppleVZPath returns the raw disk image path for profileName or an error if absent.
+func (s *ImageStore) GetAppleVZPath(profileName string) (string, error) {
+	records, err := s.load()
+	if err != nil {
+		return "", fmt.Errorf("load images: %w", err)
+	}
+	rec, ok := records[profileName]
+	if !ok {
+		return "", fmt.Errorf("no image record for profile %q", profileName)
+	}
+	p := rec[ProviderAppleVZ]
+	if p == "" {
+		return "", fmt.Errorf("no applevz image built for profile %q", profileName)
+	}
+	return p, nil
+}
+
+// SetAppleVZPath writes or updates the Apple VZ raw disk image path for profileName.
+func (s *ImageStore) SetAppleVZPath(profileName, imgPath string) error {
+	records, err := s.load()
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("load images: %w", err)
+	}
+	if records == nil {
+		records = make(map[string]ImageRecord)
+	}
+	rec := records[profileName]
+	if rec == nil {
+		rec = make(ImageRecord)
+	}
+	rec[ProviderAppleVZ] = imgPath
+	records[profileName] = rec
+	return s.save(records)
+}
+
 // List returns all image entries from images.json.
 // Returns an empty slice if the file does not exist yet.
 func (s *ImageStore) List() ([]types.ImageEntry, error) {
@@ -80,6 +116,7 @@ func (s *ImageStore) List() ([]types.ImageEntry, error) {
 			ProfileName: profileName,
 			VirtualBox:  rec[ProviderVirtualBox],
 			Hetzner:     rec[ProviderHetzner],
+			AppleVZ:     rec[ProviderAppleVZ],
 		})
 	}
 	return entries, nil
