@@ -95,6 +95,12 @@ func TestBuildUserData_ContainsCallbackRuncmd(t *testing.T) {
 	if !strings.Contains(ud, "http://server:8080/sessions/sess-1/ip") {
 		t.Errorf("user-data missing callback URL in runcmd")
 	}
+	if !strings.Contains(ud, "curl -sf -X POST") {
+		t.Errorf("runcmd missing POST curl command")
+	}
+	if !strings.Contains(ud, `\"ip\":\"$IP\"`) {
+		t.Errorf("runcmd missing ip payload")
+	}
 }
 
 func TestBuildUserData_NoCallbackWhenURLEmpty(t *testing.T) {

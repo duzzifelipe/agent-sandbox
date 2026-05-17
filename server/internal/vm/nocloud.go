@@ -69,7 +69,8 @@ write_files:
 	if vmCallbackURL != "" {
 		ud += fmt.Sprintf(`runcmd:
   - |
-    IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+    IP=$(ip -4 addr show | awk '/inet / && !/127\./ {split($2,a,"/"); print a[1]; exit}')
+    [ -z "$IP" ] && exit 0
     curl -sf -X POST %s \
       -H 'Content-Type: application/json' \
       -d "{\"ip\":\"$IP\"}"
