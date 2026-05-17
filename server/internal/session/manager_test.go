@@ -150,4 +150,9 @@ func TestManager_RegisterVMIP_StoresIPInProviderAndStore(t *testing.T) {
 	if rec.IPAddress != "192.168.64.5" {
 		t.Errorf("IPAddress: got %q, want %q", rec.IPAddress, "192.168.64.5")
 	}
+
+	vmID := "fake-dev" // matches CreateVM's "fake-" + profileName pattern
+	if fakeProvider.registeredIPs[vmID] != "192.168.64.5" {
+		t.Errorf("provider.RegisterIP: got %q, want %q", fakeProvider.registeredIPs[vmID], "192.168.64.5")
+	}
 }
