@@ -68,3 +68,26 @@ func TestStore_Get_NotFound(t *testing.T) {
 		t.Fatal("expected error for missing session")
 	}
 }
+
+func TestStore_UpdateIP(t *testing.T) {
+	store := newStore(t)
+	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "p1")
+
+	id, _ := store.Create("p1")
+	if err := store.UpdateIP(id, "192.168.64.5"); err != nil {
+		t.Fatalf("UpdateIP: %v", err)
+	}
+
+	s, _ := store.Get(id)
+	if s.IPAddress != "192.168.64.5" {
+		t.Errorf("IPAddress: got %q, want %q", s.IPAddress, "192.168.64.5")
+	}
+}
+
+func TestStore_UpdateIP_NotFound(t *testing.T) {
+	store := newStore(t)
+	err := store.UpdateIP("nonexistent", "192.168.64.5")
+	if err == nil {
+		t.Fatal("expected error for missing session")
+	}
+}

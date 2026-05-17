@@ -90,3 +90,19 @@ func (s *Store) UpdateState(id, state, ipAddress string) error {
 	}
 	return nil
 }
+
+// UpdateIP sets the ip_address of a session without changing its state.
+func (s *Store) UpdateIP(id, ipAddress string) error {
+	res, err := s.db.Exec(
+		`UPDATE sessions SET ip_address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		ipAddress, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update session ip: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("session %q not found", id)
+	}
+	return nil
+}

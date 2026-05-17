@@ -14,13 +14,17 @@ import (
 
 // fakeVM is an in-memory VMProvider for testing.
 type fakeVM struct {
-	createErr  error
-	destroyErr error
-	vms        map[string]*vm.VM
+	createErr     error
+	destroyErr    error
+	vms           map[string]*vm.VM
+	registeredIPs map[string]string
 }
 
 func newFakeVM() *fakeVM {
-	return &fakeVM{vms: make(map[string]*vm.VM)}
+	return &fakeVM{
+		vms:           make(map[string]*vm.VM),
+		registeredIPs: make(map[string]string),
+	}
 }
 
 func (f *fakeVM) CreateVM(_ context.Context, req vm.CreateVMRequest) (*vm.VM, error) {
@@ -48,7 +52,10 @@ func (f *fakeVM) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	return v, nil
 }
 
-func (f *fakeVM) RegisterIP(_ context.Context, _, _ string) error { return nil }
+func (f *fakeVM) RegisterIP(_ context.Context, vmID, ip string) error {
+	f.registeredIPs[vmID] = ip
+	return nil
+}
 
 func TestManager_StartSession_CreatesSession(t *testing.T) {
 	store := newStore(t)
@@ -115,5 +122,32 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	}
 	if len(fakeProvider.vms) != 0 {
 		t.Errorf("expected DestroyVM to be called: fakeProvider.vms has %d entries, want 0", len(fakeProvider.vms))
+	}
+}
+
+func TestManager_RegisterVMIP_StoresIPInProviderAndStore(t *testing.T) {
+	store := newStore(t)
+	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
+
+	vaultDir := t.TempDir()
+	vaultSecret := "test-secret"
+	vaultData := types.DefaultVaultData()
+	vaultData.VMAccessPublicKey = "ssh-rsa AAAA..."
+	vaultData.VMAccessPrivateKey = "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+	vault.StoreVaultData(vaultDir, "dev", vaultSecret, vaultData)
+
+	fakeProvider := newFakeVM()
+	mgr := session.NewManager(store, fakeProvider, vaultDir, vaultSecret, "")
+
+	id, _ := mgr.Start(context.Background(), "dev")
+	time.Sleep(50 * time.Millisecond)
+
+	if err := mgr.RegisterVMIP(id, "192.168.64.5"); err != nil {
+		t.Fatalf("RegisterVMIP: %v", err)
+	}
+
+	rec, _ := store.Get(id)
+	if rec.IPAddress != "192.168.64.5" {
+		t.Errorf("IPAddress: got %q, want %q", rec.IPAddress, "192.168.64.5")
 	}
 }

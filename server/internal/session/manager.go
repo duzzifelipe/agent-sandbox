@@ -103,6 +103,20 @@ func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 	}, nil
 }
 
+// RegisterVMIP stores the VM's IP in both the provider (for GetVM) and the session store.
+func (m *Manager) RegisterVMIP(sessionID, ip string) error {
+	rec, err := m.store.Get(sessionID)
+	if err != nil {
+		return fmt.Errorf("get session: %w", err)
+	}
+	if rec.VMID != "" {
+		if err := m.provider.RegisterIP(context.Background(), rec.VMID, ip); err != nil {
+			return fmt.Errorf("register ip in provider: %w", err)
+		}
+	}
+	return m.store.UpdateIP(sessionID, ip)
+}
+
 func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 	defer cancel()
