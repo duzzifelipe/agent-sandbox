@@ -282,7 +282,6 @@ func TestHandler_RegisterSessionIP(t *testing.T) {
 
 	// Insert a profile and create a session first
 	conn, _ := db.Open(filepath.Join(dir, "test.db"))
-	defer conn.Close()
 	conn.Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
 	conn.Close()
 
