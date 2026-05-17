@@ -276,3 +276,54 @@ func TestGetAgentState_ReturnsVaultData(t *testing.T) {
 		t.Errorf("expected %q, got %q", agentStateBytes, rec.Body.Bytes())
 	}
 }
+
+func TestHandler_RegisterSessionIP(t *testing.T) {
+	h, dir := newHandler(t)
+
+	// Insert a profile and create a session first
+	conn, _ := db.Open(filepath.Join(dir, "test.db"))
+	defer conn.Close()
+	conn.Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
+	conn.Close()
+
+	vault.StoreVaultData(dir, "dev", "test-secret", types.VaultData{VMAccessPublicKey: "ssh-rsa AAAA..."})
+
+	router := h.Router()
+
+	// Create session via API
+	body, _ := json.Marshal(types.CreateSessionRequest{ProfileName: "dev"})
+	req := httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create session: got %d, want %d: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var sess types.SessionResponse
+	json.NewDecoder(w.Body).Decode(&sess)
+
+	// Register IP
+	ipBody, _ := json.Marshal(map[string]string{"ip": "192.168.64.5"})
+	req2 := httptest.NewRequest(http.MethodPost, "/sessions/"+sess.ID+"/ip", bytes.NewReader(ipBody))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusNoContent {
+		t.Errorf("register ip: got %d, want %d: %s", w2.Code, http.StatusNoContent, w2.Body.String())
+	}
+}
+
+func TestHandler_RegisterSessionIP_UnknownSession(t *testing.T) {
+	h, _ := newHandler(t)
+	router := h.Router()
+
+	body, _ := json.Marshal(map[string]string{"ip": "192.168.64.5"})
+	req := httptest.NewRequest(http.MethodPost, "/sessions/nonexistent/ip", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("got %d, want %d", w.Code, http.StatusNotFound)
+	}
+}

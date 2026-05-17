@@ -71,6 +71,7 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/sessions/{id}/agent-state", h.getAgentState)
 	r.Post("/sessions/{id}/stop", h.stopSession)
 	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
+	r.Post("/sessions/{id}/ip", h.registerSessionIP)
 
 	r.Post("/images/build", h.buildImage)
 	r.Get("/images", h.listImages)
@@ -254,6 +255,22 @@ func (h *Handler) vaultSync(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar.enc")
 	if err := os.WriteFile(path, encrypted, 0600); err != nil {
 		writeError(w, http.StatusInternalServerError, "store agent state")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) registerSessionIP(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		IP string `json:"ip"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.IP == "" {
+		writeError(w, http.StatusBadRequest, "invalid JSON or missing ip")
+		return
+	}
+	if err := h.sessions.RegisterVMIP(id, body.IP); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
