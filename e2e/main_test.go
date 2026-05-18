@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -80,6 +81,22 @@ func run(m *testing.M) int {
 
 	dataDir := filepath.Join(tmpDir, "data")
 	vmDir := filepath.Join(repoRoot, "vm")
+
+	// On darwin/arm64, setup initialises the QEMU plugin (not vboxnet0).
+	// On linux, setup configures vboxnet0 and the VirtualBox plugin.
+	setup := exec.Command(serverPath, "setup", "--vm-dir="+vmDir)
+	setup.Env = append(os.Environ(), "HOME="+homeDir)
+	setup.Stdout = os.Stderr
+	setup.Stderr = os.Stderr
+	if err := setup.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "setup: %v\n", err)
+		if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+			return 1
+		}
+		// On darwin/arm64, setup failure (e.g. packer not installed) is non-fatal
+		// for tests that don't exercise VM image building.
+		fmt.Fprintf(os.Stderr, "warning: setup failed on darwin/arm64, continuing\n")
+	}
 
 	srv := exec.Command(serverPath, "serve")
 	srv.Env = append(os.Environ(),
