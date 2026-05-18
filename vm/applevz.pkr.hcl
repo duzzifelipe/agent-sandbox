@@ -50,6 +50,7 @@ source "qemu" "applevz" {
   format           = "raw"
   accelerator      = "hvf"
   machine_type     = "virt"
+  qemu_binary      = "qemu-system-aarch64"
 
   # edk2-aarch64-code.fd is shipped with QEMU installed via Homebrew.
   # If installed via another package manager, adjust the path accordingly.
