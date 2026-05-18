@@ -51,12 +51,11 @@ var isoRegistry = map[string]struct {
 }{
 	"ubuntu-24.04": {
 		URL:      "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso",
-		Checksum: "sha256:d6fea3a0b8f5a53455e7fc0b2bfeadb36e72b2432f31b0b93d7e09f07f695a42",
+		Checksum: "sha256:d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d",
 	},
 	"ubuntu-24.04-arm64": {
-		// Verify URL and checksum at: https://cdimage.ubuntu.com/releases/24.04.2/release/SHA256SUMS
 		URL:      "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso",
-		Checksum: "sha256:d2d9986ad1849dd59b77e6b15e50bf3e47c4b9e8fc8abdf39fc0cd3f5e36bef4",
+		Checksum: "sha256:9fd122eedff09dc57d66e1c29acb8d7a207e2a877e762bdf30d2c913f95f03a4",
 	},
 }
 

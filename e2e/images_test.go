@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -21,11 +22,22 @@ func TestBuildImage(t *testing.T) {
 	waitForImage(t, "e2e-image", 20*time.Minute)
 }
 
-// waitForImage polls GET /images until the named profile has a non-empty virtualbox path.
-// Defined here (e2e && vm) because sessions_test.go (e2e && vm) depends on it.
-// Do not move to helpers_test.go (e2e only) — it would be excluded from the vm build.
+// imageReadyField returns the JSON field name that indicates a built image for
+// the current platform: "appleVZ" on darwin/arm64, "virtualbox" elsewhere.
+func imageReadyField() string {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		return "appleVZ"
+	}
+	return "virtualbox"
+}
+
+// waitForImage polls GET /images until the named profile has a non-empty image path
+// for the current platform. Defined here (e2e && vm) because sessions_test.go
+// (e2e && vm) depends on it. Do not move to helpers_test.go (e2e only) — it
+// would be excluded from the vm build.
 func waitForImage(t *testing.T, profile string, timeout time.Duration) {
 	t.Helper()
+	field := imageReadyField()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		body, status := apiGET(t, "/images")
@@ -37,7 +49,7 @@ func waitForImage(t *testing.T, profile string, timeout time.Duration) {
 			t.Fatalf("unmarshal images: %v\nbody: %s", err, body)
 		}
 		for _, e := range entries {
-			if e["profile_name"] == profile && e["virtualbox"] != "" {
+			if e["profile_name"] == profile && e[field] != "" {
 				return
 			}
 		}

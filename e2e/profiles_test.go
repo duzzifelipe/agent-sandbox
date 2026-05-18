@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -53,6 +54,14 @@ func TestDuplicateProfileCreate(t *testing.T) {
 	}
 }
 
+// platformImage returns the base OS image name for the current platform.
+func platformImage() string {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		return "ubuntu-24.04-arm64"
+	}
+	return "ubuntu-24.04"
+}
+
 // writeProfileSpec writes a minimal valid profile JSON to a temp file and returns its path.
 func writeProfileSpec(t *testing.T, name string) string {
 	t.Helper()
@@ -60,7 +69,7 @@ func writeProfileSpec(t *testing.T, name string) string {
 		"name": name,
 		"infrastructure": map[string]interface{}{
 			"provider": "virtualbox",
-			"image":    "ubuntu-24.04",
+			"image":    platformImage(),
 			"tooling":  []string{},
 		},
 		"agent": map[string]interface{}{
