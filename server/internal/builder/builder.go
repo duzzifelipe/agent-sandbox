@@ -183,6 +183,13 @@ func (b *Builder) BuildAppleVZ(ctx context.Context, profile types.ProfileSpec) (
 	}
 	defer os.Remove(orchDest)
 
+	// Packer QEMU requires output_directory to not exist; use a per-profile
+	// staging dir and move the artifact to the final path afterward.
+	buildDir := filepath.Join(b.outputDir, profile.Name+"-packer")
+	if err := os.RemoveAll(buildDir); err != nil {
+		return "", fmt.Errorf("clean build dir: %w", err)
+	}
+
 	imgPath := filepath.Join(b.outputDir, profile.Name+".img")
 
 	args := []string{
@@ -191,13 +198,18 @@ func (b *Builder) BuildAppleVZ(ctx context.Context, profile types.ProfileSpec) (
 		fmt.Sprintf("-var=iso_url=%s", iso.URL),
 		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
 		fmt.Sprintf("-var=provision_script=%s", orchDest),
-		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
+		fmt.Sprintf("-var=output_dir=%s", buildDir),
 		"applevz.pkr.hcl",
 	}
 
 	if err := b.runner.Run(ctx, b.vmDir, args); err != nil {
 		return "", fmt.Errorf("packer build: %w", err)
 	}
+
+	if err := os.Rename(filepath.Join(buildDir, profile.Name+".img"), imgPath); err != nil {
+		return "", fmt.Errorf("move image: %w", err)
+	}
+	os.RemoveAll(buildDir)
 
 	if err := b.images.SetAppleVZPath(profile.Name, imgPath); err != nil {
 		return "", fmt.Errorf("store image reference: %w", err)

@@ -26,6 +26,22 @@ func (f *fakeRunner) Run(_ context.Context, _ string, args []string) error {
 	data, err := os.ReadFile(filepath.Join(f.vmDir, "orchestrate.sh"))
 	f.readErr = err
 	f.orchContent = string(data)
+
+	// Create a fake artifact so callers that rename the output file don't fail.
+	var outputDir, vmName string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-var=output_dir=") {
+			outputDir = strings.TrimPrefix(arg, "-var=output_dir=")
+		}
+		if strings.HasPrefix(arg, "-var=vm_name=") {
+			vmName = strings.TrimPrefix(arg, "-var=vm_name=")
+		}
+	}
+	if f.err == nil && outputDir != "" && vmName != "" {
+		_ = os.MkdirAll(outputDir, 0755)
+		_ = os.WriteFile(filepath.Join(outputDir, vmName+".img"), []byte("fake"), 0644)
+	}
+
 	return f.err
 }
 
