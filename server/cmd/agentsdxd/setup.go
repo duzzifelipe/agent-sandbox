@@ -46,7 +46,14 @@ func runSetup(vmDir string) error {
 }
 
 func runSetupDarwinARM64(vmDir string) error {
-	fmt.Println("\n[1/1] Initialising Packer QEMU plugin for Apple VZ...")
+	fmt.Println("\n[1/2] Checking QEMU (qemu-system-aarch64)...")
+
+	if _, err := exec.LookPath("qemu-system-aarch64"); err != nil {
+		return fmt.Errorf("QEMU not found — install it with: brew install qemu")
+	}
+	fmt.Println("  qemu-system-aarch64 found.")
+
+	fmt.Println("\n[2/2] Initialising Packer QEMU plugin for Apple VZ...")
 
 	packerPath, err := exec.LookPath("packer")
 	if err != nil {
