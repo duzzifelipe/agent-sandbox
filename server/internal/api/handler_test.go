@@ -56,6 +56,11 @@ func (f *fakeBuilder) BuildVirtualBox(_ context.Context, p types.ProfileSpec) (s
 	return "/tmp/fake.ova", f.err
 }
 
+func (f *fakeBuilder) BuildAppleVZ(_ context.Context, p types.ProfileSpec) (string, error) {
+	f.profile = p.Name
+	return "/tmp/fake.img", f.err
+}
+
 // fakeVM satisfies vm.VMProvider for handler tests.
 type fakeVM struct{}
 

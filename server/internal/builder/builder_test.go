@@ -213,6 +213,79 @@ func TestBuildVirtualBox_PackerFailure_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestBuildAppleVZ_PassesCorrectArgs(t *testing.T) {
+	vmDir := t.TempDir()
+	outputDir := t.TempDir()
+	imagesPath := filepath.Join(t.TempDir(), "images.json")
+	imageStore := vm.NewImageStore(imagesPath)
+
+	fake := &fakeRunner{vmDir: vmDir}
+	b := &Builder{
+		vmDir:     vmDir,
+		outputDir: outputDir,
+		images:    imageStore,
+		runner:    fake,
+	}
+
+	profile := types.ProfileSpec{
+		Name: "arm-profile",
+		Infrastructure: types.InfrastructureConfig{
+			Image:   "ubuntu-24.04-arm64",
+			Tooling: []string{},
+		},
+		Agent: types.AgentConfig{
+			Provider: "claude",
+		},
+	}
+
+	_, err := b.BuildAppleVZ(context.Background(), profile)
+	if err != nil {
+		t.Fatalf("BuildAppleVZ: %v", err)
+	}
+
+	argsStr := strings.Join(fake.capturedArgs, " ")
+	if !strings.Contains(argsStr, "applevz.pkr.hcl") {
+		t.Errorf("expected applevz.pkr.hcl in args, got: %v", fake.capturedArgs)
+	}
+	if !strings.Contains(argsStr, "-var=vm_name=arm-profile") {
+		t.Errorf("expected vm_name arg, got args: %v", fake.capturedArgs)
+	}
+	if !strings.Contains(argsStr, "ubuntu-24.04.2-live-server-arm64.iso") {
+		t.Errorf("expected arm64 iso_url, got args: %v", fake.capturedArgs)
+	}
+}
+
+func TestBuildAppleVZ_UnknownImage_ReturnsError(t *testing.T) {
+	vmDir := t.TempDir()
+	outputDir := t.TempDir()
+	imagesPath := filepath.Join(t.TempDir(), "images.json")
+	imageStore := vm.NewImageStore(imagesPath)
+
+	fake := &fakeRunner{vmDir: vmDir}
+	b := &Builder{
+		vmDir:     vmDir,
+		outputDir: outputDir,
+		images:    imageStore,
+		runner:    fake,
+	}
+
+	profile := types.ProfileSpec{
+		Name: "arm-profile",
+		Infrastructure: types.InfrastructureConfig{
+			Image: "unknown-os-arm64",
+		},
+		Agent: types.AgentConfig{Provider: "claude"},
+	}
+
+	_, err := b.BuildAppleVZ(context.Background(), profile)
+	if err == nil {
+		t.Fatal("expected error for unknown image")
+	}
+	if !strings.Contains(err.Error(), "unknown base image") {
+		t.Errorf("expected 'unknown base image', got: %v", err)
+	}
+}
+
 func TestBuildVirtualBox_UnknownImage_ReturnsError(t *testing.T) {
 	vmDir := t.TempDir()
 	outputDir := t.TempDir()

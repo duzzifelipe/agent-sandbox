@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,7 @@ import (
 // ImageBuilder is the interface for building VM images.
 type ImageBuilder interface {
 	BuildVirtualBox(ctx context.Context, profile types.ProfileSpec) (string, error)
+	BuildAppleVZ(ctx context.Context, profile types.ProfileSpec) (string, error)
 }
 
 // Handler holds all dependencies for the HTTP API.
@@ -293,8 +295,14 @@ func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		if _, err := h.builder.BuildVirtualBox(context.Background(), spec); err != nil {
-			log.Printf("buildImage: profile %s: %v", req.ProfileName, err)
+		if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+			if _, err := h.builder.BuildAppleVZ(context.Background(), spec); err != nil {
+				log.Printf("buildImage applevz: profile %s: %v", req.ProfileName, err)
+			}
+		} else {
+			if _, err := h.builder.BuildVirtualBox(context.Background(), spec); err != nil {
+				log.Printf("buildImage virtualbox: profile %s: %v", req.ProfileName, err)
+			}
 		}
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": req.ProfileName})

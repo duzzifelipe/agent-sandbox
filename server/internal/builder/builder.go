@@ -53,6 +53,11 @@ var isoRegistry = map[string]struct {
 		URL:      "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso",
 		Checksum: "sha256:d6fea3a0b8f5a53455e7fc0b2bfeadb36e72b2432f31b0b93d7e09f07f695a42",
 	},
+	"ubuntu-24.04-arm64": {
+		// Verify URL and checksum at: https://cdimage.ubuntu.com/releases/24.04.2/release/SHA256SUMS
+		URL:      "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso",
+		Checksum: "sha256:d2d9986ad1849dd59b77e6b15e50bf3e47c4b9e8fc8abdf39fc0cd3f5e36bef4",
+	},
 }
 
 // composeScripts returns the ordered list of in-VM provisioning script paths
@@ -152,4 +157,50 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 		return "", fmt.Errorf("store image reference: %w", err)
 	}
 	return ovaPath, nil
+}
+
+// BuildAppleVZ builds an Apple VZ raw disk image for the given profile.
+func (b *Builder) BuildAppleVZ(ctx context.Context, profile types.ProfileSpec) (string, error) {
+	iso, ok := isoRegistry[profile.Infrastructure.Image]
+	if !ok {
+		return "", fmt.Errorf("unknown base image %q", profile.Infrastructure.Image)
+	}
+
+	scripts := composeScripts(profile)
+	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(orchScript)
+
+	orchDest := filepath.Join(b.vmDir, "orchestrate.sh")
+	data, err := os.ReadFile(orchScript)
+	if err != nil {
+		return "", fmt.Errorf("read orchestration script: %w", err)
+	}
+	if err := os.WriteFile(orchDest, data, 0o755); err != nil {
+		return "", fmt.Errorf("write orchestration script to vmDir: %w", err)
+	}
+	defer os.Remove(orchDest)
+
+	imgPath := filepath.Join(b.outputDir, profile.Name+".img")
+
+	args := []string{
+		"build",
+		fmt.Sprintf("-var=vm_name=%s", profile.Name),
+		fmt.Sprintf("-var=iso_url=%s", iso.URL),
+		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
+		fmt.Sprintf("-var=provision_script=%s", orchDest),
+		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
+		"applevz.pkr.hcl",
+	}
+
+	if err := b.runner.Run(ctx, b.vmDir, args); err != nil {
+		return "", fmt.Errorf("packer build: %w", err)
+	}
+
+	if err := b.images.SetAppleVZPath(profile.Name, imgPath); err != nil {
+		return "", fmt.Errorf("store image reference: %w", err)
+	}
+	return imgPath, nil
 }
