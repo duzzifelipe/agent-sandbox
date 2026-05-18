@@ -98,6 +98,11 @@ func run(m *testing.M) int {
 		fmt.Fprintf(os.Stderr, "warning: setup failed on darwin/arm64, continuing\n")
 	}
 
+	// Keep a stable Packer ISO cache across test runs so large ISOs are not
+	// re-downloaded every time.
+	isoCache := filepath.Join(os.TempDir(), "agentsdx-e2e-packer-cache")
+	_ = os.MkdirAll(isoCache, 0755)
+
 	srv := exec.Command(serverPath, "serve")
 	srv.Env = append(os.Environ(),
 		"AGENTSDX_VAULT_SECRET=e2e-test-secret-do-not-use-in-prod",
@@ -106,6 +111,7 @@ func run(m *testing.M) int {
 		"AGENTSDX_DATA_DIR="+dataDir,
 		"AGENTSDX_VM_DIR="+vmDir,
 		"HOME="+homeDir,
+		"PACKER_CACHE_DIR="+isoCache,
 	)
 	srv.Stdout = os.Stderr
 	srv.Stderr = os.Stderr
