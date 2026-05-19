@@ -95,6 +95,10 @@ build {
     ]
   }
 
+  provisioner "shell" {
+    inline = ["mkdir -p /tmp/agentsdx-vm/"]
+  }
+
   provisioner "file" {
     source      = "${path.root}/"
     destination = "/tmp/agentsdx-vm/"
