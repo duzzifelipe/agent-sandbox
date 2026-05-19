@@ -88,6 +88,10 @@ source "qemu" "applevz" {
 build {
   sources = ["source.qemu.applevz"]
 
+  provisioner "shell" {
+    inline = ["mkdir -p /tmp/agentsdx-vm/"]
+  }
+
   provisioner "file" {
     source      = "${path.root}/"
     destination = "/tmp/agentsdx-vm/"
