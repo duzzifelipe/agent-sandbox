@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"text/template"
 
 	"github.com/duck-labs/agentsdx-server/internal/vm"
@@ -44,14 +45,20 @@ func New(vmDir, outputDir string, images *vm.ImageStore) *Builder {
 	}
 }
 
-// isoRegistry maps base OS names to ISO URL + checksum.
-var isoRegistry = map[string]struct {
+// isoRegistry maps base OS names to ISO URL + checksum, keyed by GOARCH.
+var isoRegistry = map[string]map[string]struct {
 	URL      string
 	Checksum string
 }{
 	"ubuntu-24.04": {
-		URL:      "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso",
-		Checksum: "sha256:d6fea3a0b8f5a53455e7fc0b2bfeadb36e72b2432f31b0b93d7e09f07f695a42",
+		"amd64": {
+			URL:      "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso",
+			Checksum: "sha256:d6fea3a0b8f5a53455e7fc0b2bfeadb36e72b2432f31b0b93d7e09f07f695a42",
+		},
+		"arm64": {
+			URL:      "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso",
+			Checksum: "sha256:3c69d7f0f0b44fc82d0ec6f85694e8b7c11db11aaba1060e56f61d4bc3cbdb1b",
+		},
 	},
 }
 
@@ -104,13 +111,18 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 	return f.Name(), nil
 }
 
-// BuildVirtualBox builds a VirtualBox OVA image for the given profile.
-// It generates a temp orchestration script, invokes Packer, stores the OVA
-// path in ImageStore, and cleans up the temp file.
-func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec) (string, error) {
-	iso, ok := isoRegistry[profile.Infrastructure.Image]
+// BuildQEMU builds a QEMU qcow2 image for the given profile using the host architecture.
+// It generates a temp orchestration script, invokes Packer, stores the image path in
+// ImageStore, and cleans up the temp file.
+func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (string, error) {
+	arch := runtime.GOARCH // "arm64" or "amd64"
+	archISOs, ok := isoRegistry[profile.Infrastructure.Image]
 	if !ok {
 		return "", fmt.Errorf("unknown base image %q", profile.Infrastructure.Image)
+	}
+	iso, ok := archISOs[arch]
+	if !ok {
+		return "", fmt.Errorf("no ISO for %s/%s", profile.Infrastructure.Image, arch)
 	}
 
 	scripts := composeScripts(profile)
@@ -120,8 +132,6 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 	}
 	defer os.Remove(orchScript)
 
-	// Copy orchestration script into vmDir so Packer can upload it
-	// as part of the vm/ directory upload.
 	orchDest := filepath.Join(b.vmDir, "orchestrate.sh")
 	data, err := os.ReadFile(orchScript)
 	if err != nil {
@@ -132,7 +142,7 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 	}
 	defer os.Remove(orchDest)
 
-	ovaPath := filepath.Join(b.outputDir, profile.Name+".ova")
+	imagePath := filepath.Join(b.outputDir, profile.Name+".qcow2")
 
 	args := []string{
 		"build",
@@ -141,15 +151,34 @@ func (b *Builder) BuildVirtualBox(ctx context.Context, profile types.ProfileSpec
 		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
 		"-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh",
 		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
-		"virtualbox.pkr.hcl",
 	}
+	args = append(args, qemuPackerVars(arch)...)
+	args = append(args, "qemu.pkr.hcl")
 
 	if err := b.runner.Run(ctx, b.vmDir, args); err != nil {
 		return "", fmt.Errorf("packer build: %w", err)
 	}
 
-	if err := b.images.SetVirtualBoxPath(profile.Name, ovaPath); err != nil {
+	if err := b.images.SetQEMUPath(profile.Name, imagePath); err != nil {
 		return "", fmt.Errorf("store image reference: %w", err)
 	}
-	return ovaPath, nil
+	return imagePath, nil
+}
+
+// qemuPackerVars returns architecture-specific Packer variable overrides.
+func qemuPackerVars(arch string) []string {
+	if arch == "arm64" {
+		return []string{
+			"-var=qemu_binary=qemu-system-aarch64",
+			"-var=machine_type=virt",
+			"-var=cpu_model=host",
+			"-var=efi_firmware_code=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+		}
+	}
+	return []string{
+		"-var=qemu_binary=qemu-system-x86_64",
+		"-var=machine_type=q35",
+		"-var=cpu_model=host",
+		"-var=efi_firmware_code=",
+	}
 }

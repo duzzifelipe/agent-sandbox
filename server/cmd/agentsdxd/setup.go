@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -14,14 +14,14 @@ func newSetupCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "One-time host setup: configure vboxnet0 and initialise the Packer plugin",
+		Short: "One-time host setup: verify QEMU and initialise the Packer QEMU plugin",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup(vmDir)
 		},
 	}
 
 	cmd.Flags().StringVar(&vmDir, "vm-dir", envOrDefault("AGENTSDX_VM_DIR", "./vm"),
-		"Path to the vm/ directory containing virtualbox.pkr.hcl")
+		"Path to the vm/ directory containing qemu.pkr.hcl")
 
 	return cmd
 }
@@ -29,7 +29,7 @@ func newSetupCmd() *cobra.Command {
 func runSetup(vmDir string) error {
 	fmt.Println("=== agentsdxd setup ===")
 
-	if err := setupVboxnet0(); err != nil {
+	if err := checkQEMU(); err != nil {
 		return err
 	}
 
@@ -41,47 +41,30 @@ func runSetup(vmDir string) error {
 	return nil
 }
 
-func setupVboxnet0() error {
-	fmt.Println("\n[1/2] Configuring VirtualBox host-only adapter (vboxnet0)...")
+func checkQEMU() error {
+	fmt.Println("\n[1/2] Checking QEMU...")
 
-	if _, err := exec.LookPath("VBoxManage"); err != nil {
-		return fmt.Errorf("VBoxManage not found in PATH — install VirtualBox first")
+	binary := qemuBinaryName()
+	if _, err := exec.LookPath(binary); err != nil {
+		return fmt.Errorf("%s not found in PATH — install QEMU first (brew install qemu)", binary)
 	}
 
-	// Check if vboxnet0 already exists and is correctly configured.
-	out, err := exec.Command("VBoxManage", "list", "hostonlyifs").Output()
-	if err != nil {
-		return fmt.Errorf("list hostonlyifs: %w", err)
+	if _, err := exec.LookPath("qemu-img"); err != nil {
+		return fmt.Errorf("qemu-img not found in PATH — install QEMU first (brew install qemu)")
 	}
 
-	if hasVboxnet0(string(out)) {
-		fmt.Println("  vboxnet0 already exists — skipping creation.")
-	} else {
-		fmt.Println("  Creating vboxnet0...")
-		if out, err := exec.Command("VBoxManage", "hostonlyif", "create").CombinedOutput(); err != nil {
-			return fmt.Errorf("create hostonlyif: %w\n%s", err, out)
-		}
-	}
-
-	fmt.Println("  Configuring vboxnet0 (192.168.56.1/24)...")
-	out2, err := exec.Command("VBoxManage", "hostonlyif", "ipconfig", "vboxnet0",
-		"--ip", "192.168.56.1", "--netmask", "255.255.255.0").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("configure vboxnet0: %w\n%s", err, out2)
-	}
-
-	fmt.Println("  vboxnet0 ready (192.168.56.1/24).")
+	fmt.Printf("  %s and qemu-img found.\n", binary)
 	return nil
 }
 
 func setupPackerPlugin(vmDir string) error {
-	fmt.Println("\n[2/2] Initialising Packer VirtualBox plugin...")
+	fmt.Println("\n[2/2] Initialising Packer QEMU plugin...")
 
 	if _, err := exec.LookPath("packer"); err != nil {
 		return fmt.Errorf("packer not found in PATH — install Packer first (brew install packer)")
 	}
 
-	hclPath := vmDir + "/virtualbox.pkr.hcl"
+	hclPath := vmDir + "/qemu.pkr.hcl"
 	if _, err := os.Stat(hclPath); err != nil {
 		return fmt.Errorf("Packer template not found at %s: %w", hclPath, err)
 	}
@@ -93,17 +76,14 @@ func setupPackerPlugin(vmDir string) error {
 		return fmt.Errorf("packer init: %w", err)
 	}
 
-	fmt.Println("  Packer VirtualBox plugin ready.")
+	fmt.Println("  Packer QEMU plugin ready.")
 	return nil
 }
 
-// hasVboxnet0 reports whether vboxnet0 appears in VBoxManage list hostonlyifs output.
-func hasVboxnet0(output string) bool {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "Name:") &&
-			strings.Contains(line, "vboxnet0") {
-			return true
-		}
+// qemuBinaryName returns the QEMU system binary for the current host architecture.
+func qemuBinaryName() string {
+	if runtime.GOARCH == "arm64" {
+		return "qemu-system-aarch64"
 	}
-	return false
+	return "qemu-system-x86_64"
 }

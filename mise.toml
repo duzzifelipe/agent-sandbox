@@ -1,2 +1,21 @@
 [tools]
 go = "1.26.3"
+packer = "latest"
+
+[env]
+_.file = ".env"
+
+[tasks."build:server"]
+description = "Build the Server"
+run = "cd server && go build -o ../dist/agentsdxd ./cmd/agentsdxd && cd .."
+
+[tasks."build:cli"]
+description = "Build the cli"
+run = "cd cli && go build -o ../dist/agentsdx  ./cmd/agentsdx  && cd .."
+
+[tasks.build]
+description = "Build both the server and the cli"
+run = [
+    {task = "build:server"},
+    {task = "build:cli"}
+] 

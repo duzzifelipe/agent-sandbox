@@ -29,6 +29,6 @@ type BuildImageRequest struct {
 
 type ImageEntry struct {
 	ProfileName string `json:"profile_name"`
-	VirtualBox  string `json:"virtualbox"`
-	Hetzner     string `json:"hetzner"`
+	QEMU        string `json:"qemu,omitempty"`
+	Hetzner     string `json:"hetzner,omitempty"`
 }

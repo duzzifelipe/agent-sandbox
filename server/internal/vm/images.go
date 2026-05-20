@@ -12,8 +12,8 @@ import (
 type Provider string
 
 const (
-	ProviderVirtualBox Provider = "virtualbox"
-	ProviderHetzner    Provider = "hetzner"
+	ProviderQEMU    Provider = "qemu"
+	ProviderHetzner Provider = "hetzner"
 )
 
 // ImageRecord maps a Provider to its built image path for a single profile.
@@ -29,8 +29,8 @@ func NewImageStore(path string) *ImageStore {
 	return &ImageStore{path: path}
 }
 
-// GetVirtualBoxPath returns the OVA path for profileName or an error if absent.
-func (s *ImageStore) GetVirtualBoxPath(profileName string) (string, error) {
+// GetQEMUPath returns the qcow2 path for profileName or an error if absent.
+func (s *ImageStore) GetQEMUPath(profileName string) (string, error) {
 	records, err := s.load()
 	if err != nil {
 		return "", fmt.Errorf("load images: %w", err)
@@ -39,15 +39,15 @@ func (s *ImageStore) GetVirtualBoxPath(profileName string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no image record for profile %q", profileName)
 	}
-	p := rec[ProviderVirtualBox]
+	p := rec[ProviderQEMU]
 	if p == "" {
-		return "", fmt.Errorf("no virtualbox image built for profile %q", profileName)
+		return "", fmt.Errorf("no qemu image built for profile %q", profileName)
 	}
 	return p, nil
 }
 
-// SetVirtualBoxPath writes or updates the VirtualBox OVA path for profileName.
-func (s *ImageStore) SetVirtualBoxPath(profileName, ovaPath string) error {
+// SetQEMUPath writes or updates the QEMU qcow2 path for profileName.
+func (s *ImageStore) SetQEMUPath(profileName, imagePath string) error {
 	records, err := s.load()
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("load images: %w", err)
@@ -59,7 +59,7 @@ func (s *ImageStore) SetVirtualBoxPath(profileName, ovaPath string) error {
 	if rec == nil {
 		rec = make(ImageRecord)
 	}
-	rec[ProviderVirtualBox] = ovaPath
+	rec[ProviderQEMU] = imagePath
 	records[profileName] = rec
 	return s.save(records)
 }
@@ -78,7 +78,7 @@ func (s *ImageStore) List() ([]types.ImageEntry, error) {
 	for profileName, rec := range records {
 		entries = append(entries, types.ImageEntry{
 			ProfileName: profileName,
-			VirtualBox:  rec[ProviderVirtualBox],
+			QEMU:        rec[ProviderQEMU],
 			Hetzner:     rec[ProviderHetzner],
 		})
 	}

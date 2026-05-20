@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -129,7 +130,7 @@ func min(a, b int) int {
 	return b
 }
 
-func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
+func TestBuildQEMU_PassesCorrectArgs(t *testing.T) {
 	vmDir := t.TempDir()
 	outputDir := t.TempDir()
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
@@ -154,9 +155,9 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 		},
 	}
 
-	_, err := b.BuildVirtualBox(context.Background(), profile)
+	_, err := b.BuildQEMU(context.Background(), profile)
 	if err != nil {
-		t.Fatalf("BuildVirtualBox: %v", err)
+		t.Fatalf("BuildQEMU: %v", err)
 	}
 
 	if fake.readErr != nil {
@@ -165,8 +166,10 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 
 	argsStr := strings.Join(fake.capturedArgs, " ")
 
-	if !strings.Contains(argsStr, "-var=iso_url=https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso") {
-		t.Errorf("expected iso_url arg, got args: %v", fake.capturedArgs)
+	arch := runtime.GOARCH
+	expectedISO := isoRegistry["ubuntu-24.04"][arch].URL
+	if !strings.Contains(argsStr, "-var=iso_url="+expectedISO) {
+		t.Errorf("expected iso_url=%s arg, got args: %v", expectedISO, fake.capturedArgs)
 	}
 	if !strings.Contains(argsStr, "-var=vm_name=test-profile") {
 		t.Errorf("expected vm_name arg, got args: %v", fake.capturedArgs)
@@ -174,9 +177,12 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 	if !strings.Contains(argsStr, "-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh") {
 		t.Errorf("expected provision_script arg, got args: %v", fake.capturedArgs)
 	}
+	if !strings.Contains(argsStr, "qemu.pkr.hcl") {
+		t.Errorf("expected qemu.pkr.hcl template, got args: %v", fake.capturedArgs)
+	}
 }
 
-func TestBuildVirtualBox_PackerFailure_ReturnsError(t *testing.T) {
+func TestBuildQEMU_PackerFailure_ReturnsError(t *testing.T) {
 	vmDir := t.TempDir()
 	outputDir := t.TempDir()
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
@@ -204,7 +210,7 @@ func TestBuildVirtualBox_PackerFailure_ReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := b.BuildVirtualBox(context.Background(), profile)
+	_, err := b.BuildQEMU(context.Background(), profile)
 	if err == nil {
 		t.Fatal("expected error from packer failure, got nil")
 	}
@@ -213,7 +219,7 @@ func TestBuildVirtualBox_PackerFailure_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestBuildVirtualBox_UnknownImage_ReturnsError(t *testing.T) {
+func TestBuildQEMU_UnknownImage_ReturnsError(t *testing.T) {
 	vmDir := t.TempDir()
 	outputDir := t.TempDir()
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
@@ -237,7 +243,7 @@ func TestBuildVirtualBox_UnknownImage_ReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := b.BuildVirtualBox(context.Background(), profile)
+	_, err := b.BuildQEMU(context.Background(), profile)
 	if err == nil {
 		t.Fatal("expected error for unknown image, got nil")
 	}

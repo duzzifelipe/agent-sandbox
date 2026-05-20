@@ -60,7 +60,7 @@ func migrate(conn *sql.DB) error {
 
 	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS images (
         profile_name TEXT PRIMARY KEY,
-        virtualbox TEXT NOT NULL DEFAULT '',
+        qemu TEXT NOT NULL DEFAULT '',
         hetzner TEXT NOT NULL DEFAULT '',
         built_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (profile_name) REFERENCES profiles(name)

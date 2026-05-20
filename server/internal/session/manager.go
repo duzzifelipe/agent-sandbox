@@ -102,6 +102,13 @@ func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 	}, nil
 }
 
+// ReportReady marks a session as running with the given IP address.
+// Called by the /sessions/{id}/ready API endpoint when the VM's cloud-init
+// callback fires after boot.
+func (m *Manager) ReportReady(sessionID, ipAddress string) error {
+	return m.store.UpdateState(sessionID, types.SessionStateRunning, ipAddress)
+}
+
 func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 	defer cancel()
@@ -110,6 +117,7 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 	defer ticker.Stop()
 
 	for {
+		// Check provider for IP.
 		v, err := m.provider.GetVM(ctx, vmID)
 		if err == nil && v.State == vm.VMStateRunning && v.IPAddress != "" {
 			_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress)
@@ -118,6 +126,14 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 		if err != nil {
 			log.Printf("session %s: GetVM error: %v", sessionID, err)
 		}
+
+		// Also check if the session was already marked running via the
+		// /sessions/{id}/ready callback (QEMU uses this path).
+		if rec, storeErr := m.store.Get(sessionID); storeErr == nil &&
+			rec.State == types.SessionStateRunning && rec.IPAddress != "" {
+			return
+		}
+
 		select {
 		case <-ctx.Done():
 			log.Printf("session %s: timed out waiting for VM to start", sessionID)

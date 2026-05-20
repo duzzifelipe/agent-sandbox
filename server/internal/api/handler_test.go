@@ -51,9 +51,9 @@ type fakeBuilder struct {
 	err     error
 }
 
-func (f *fakeBuilder) BuildVirtualBox(_ context.Context, p types.ProfileSpec) (string, error) {
+func (f *fakeBuilder) BuildQEMU(_ context.Context, p types.ProfileSpec) (string, error) {
 	f.profile = p.Name
-	return "/tmp/fake.ova", f.err
+	return "/tmp/fake.qcow2", f.err
 }
 
 // fakeVM satisfies vm.VMProvider for handler tests.
@@ -73,7 +73,7 @@ func TestHandler_CreateAndListProfiles(t *testing.T) {
 
 	spec := types.ProfileSpec{
 		Name:           "test-profile",
-		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Provider: "qemu", Image: "ubuntu-24.04"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 	body, _ := json.Marshal(spec)
@@ -137,13 +137,13 @@ func TestBuildImage_Accepted(t *testing.T) {
 	h, dir := newHandler(t)
 
 	conn, _ := db.Open(filepath.Join(dir, "test.db"))
-	conn.Exec("INSERT INTO profiles (name, spec) VALUES (?, ?)", "dev", `{"name":"dev","infrastructure":{"provider":"virtualbox","image":"ubuntu-24.04"}}`)
+	conn.Exec("INSERT INTO profiles (name, spec) VALUES (?, ?)", "dev", `{"name":"dev","infrastructure":{"provider":"qemu","image":"ubuntu-24.04"}}`)
 	conn.Close()
 
 	// Create the profile in the profile store via the API.
 	spec := types.ProfileSpec{
 		Name:           "dev",
-		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Provider: "qemu", Image: "ubuntu-24.04"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 	body, _ := json.Marshal(spec)
@@ -194,7 +194,7 @@ func TestGetAgentState_NoState(t *testing.T) {
 	// Create profile and session.
 	spec := types.ProfileSpec{
 		Name:           "dev",
-		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Provider: "qemu", Image: "ubuntu-24.04"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 	body, _ := json.Marshal(spec)
@@ -230,7 +230,7 @@ func TestGetAgentState_ReturnsVaultData(t *testing.T) {
 	// Create profile and session.
 	spec := types.ProfileSpec{
 		Name:           "dev",
-		Infrastructure: types.InfrastructureConfig{Provider: "virtualbox", Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Provider: "qemu", Image: "ubuntu-24.04"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 	body, _ := json.Marshal(spec)

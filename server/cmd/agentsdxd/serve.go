@@ -41,6 +41,7 @@ func runServe() {
 		{filepath.Join(dataDir, "vault"), 0700},
 		{filepath.Join(dataDir, "iso"), 0755},
 		{filepath.Join(dataDir, "images"), 0755},
+		{filepath.Join(dataDir, "qemu"), 0755},
 	} {
 		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
 			log.Fatalf("create data dir %s: %v", dir.path, err)
@@ -55,7 +56,7 @@ func runServe() {
 
 	profileStore := profile.NewStore(conn, filepath.Join(dataDir, "profiles"))
 	images := vm.NewImageStore(filepath.Join(dataDir, "images.json"))
-	provider := vm.NewVirtualBoxProvider(images, filepath.Join(dataDir, "iso"))
+	provider := vm.NewQEMUProvider(images, filepath.Join(dataDir, "iso"), filepath.Join(dataDir, "qemu"))
 
 	sessionStore := session.NewStore(conn)
 	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret, serverURL)

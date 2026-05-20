@@ -21,7 +21,7 @@ import (
 
 // ImageBuilder is the interface for building VM images.
 type ImageBuilder interface {
-	BuildVirtualBox(ctx context.Context, profile types.ProfileSpec) (string, error)
+	BuildQEMU(ctx context.Context, profile types.ProfileSpec) (string, error)
 }
 
 // Handler holds all dependencies for the HTTP API.
@@ -71,6 +71,7 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/sessions/{id}/agent-state", h.getAgentState)
 	r.Post("/sessions/{id}/stop", h.stopSession)
 	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
+	r.Post("/sessions/{id}/ready", h.sessionReady)
 
 	r.Post("/images/build", h.buildImage)
 	r.Get("/images", h.listImages)
@@ -271,11 +272,27 @@ func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		if _, err := h.builder.BuildVirtualBox(context.Background(), spec); err != nil {
+		if _, err := h.builder.BuildQEMU(context.Background(), spec); err != nil {
 			log.Printf("buildImage: profile %s: %v", req.ProfileName, err)
 		}
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": req.ProfileName})
+}
+
+func (h *Handler) sessionReady(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		IPAddress string `json:"ip_address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.IPAddress == "" {
+		writeError(w, http.StatusBadRequest, "ip_address required")
+		return
+	}
+	if err := h.sessions.ReportReady(id, body.IPAddress); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) listImages(w http.ResponseWriter, r *http.Request) {

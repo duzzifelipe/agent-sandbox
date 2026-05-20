@@ -48,6 +48,7 @@ func NoCloudMetaData(instanceID string) string {
 //   - registers the VM access authorized key
 //   - writes /root/.ssh/id_rsa (git private key, base64-encoded to avoid YAML issues)
 //   - writes /etc/agentsdx.env with session context for entrypoint.sh
+//   - calls back to the server with the VM's IP once cloud-init completes
 func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
 	return fmt.Sprintf(`#cloud-config
@@ -67,5 +68,8 @@ write_files:
       AGENTSDX_SERVER_URL=%s
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
-`, authorizedKey, encodedKey, serverURL, sessionID, profileName)
+runcmd:
+  - IP=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+  - curl -sf -X POST "%s/sessions/%s/ready" -H "Content-Type: application/json" -d "{\"ip_address\":\"$IP\"}" || true
+`, authorizedKey, encodedKey, serverURL, sessionID, profileName, serverURL, sessionID)
 }

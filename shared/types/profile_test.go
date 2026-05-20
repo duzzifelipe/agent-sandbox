@@ -11,7 +11,7 @@ func TestProfileSpec_YAMLRoundtrip(t *testing.T) {
 	input := `
 name: work-backend
 infrastructure:
-  provider: virtualbox
+  provider: qemu
   image: ubuntu-24.04
   tooling:
     - mise
@@ -33,8 +33,8 @@ agent:
 	if got.Name != "work-backend" {
 		t.Errorf("Name: got %q, want %q", got.Name, "work-backend")
 	}
-	if got.Infrastructure.Provider != "virtualbox" {
-		t.Errorf("Infrastructure.Provider: got %q, want %q", got.Infrastructure.Provider, "virtualbox")
+	if got.Infrastructure.Provider != "qemu" {
+		t.Errorf("Infrastructure.Provider: got %q, want %q", got.Infrastructure.Provider, "qemu")
 	}
 	if got.Infrastructure.Image != "ubuntu-24.04" {
 		t.Errorf("Infrastructure.Image: got %q, want %q", got.Infrastructure.Image, "ubuntu-24.04")

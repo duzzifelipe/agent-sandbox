@@ -14,7 +14,7 @@ func sampleSpec(name string) types.ProfileSpec {
 	return types.ProfileSpec{
 		Name: name,
 		Infrastructure: types.InfrastructureConfig{
-			Provider: "virtualbox",
+			Provider: "qemu",
 			Image:    "ubuntu-24.04",
 			Tooling:  []string{"git", "node"},
 		},

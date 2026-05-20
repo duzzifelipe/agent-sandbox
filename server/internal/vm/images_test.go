@@ -17,61 +17,61 @@ func writeImagesJSON(t *testing.T, dir string, data map[string]vm.ImageRecord) s
 	return path
 }
 
-func TestImageStore_GetVirtualBoxPath_Found(t *testing.T) {
+func TestImageStore_GetQEMUPath_Found(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"my-profile": {vm.ProviderVirtualBox: "/data/images/my-profile.ova"},
+		"my-profile": {vm.ProviderQEMU: "/data/images/my-profile.qcow2"},
 	})
 
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	path, err := store.GetVirtualBoxPath("my-profile")
+	path, err := store.GetQEMUPath("my-profile")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if path != "/data/images/my-profile.ova" {
-		t.Errorf("got %q, want %q", path, "/data/images/my-profile.ova")
+	if path != "/data/images/my-profile.qcow2" {
+		t.Errorf("got %q, want %q", path, "/data/images/my-profile.qcow2")
 	}
 }
 
-func TestImageStore_GetVirtualBoxPath_NotFound(t *testing.T) {
+func TestImageStore_GetQEMUPath_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{})
 
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	_, err := store.GetVirtualBoxPath("missing")
+	_, err := store.GetQEMUPath("missing")
 	if err == nil {
 		t.Fatal("expected error for missing profile")
 	}
 }
 
-func TestImageStore_GetVirtualBoxPath_EmptyPath(t *testing.T) {
+func TestImageStore_GetQEMUPath_EmptyPath(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"no-image": {vm.ProviderVirtualBox: ""},
+		"no-image": {vm.ProviderQEMU: ""},
 	})
 
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	_, err := store.GetVirtualBoxPath("no-image")
+	_, err := store.GetQEMUPath("no-image")
 	if err == nil {
-		t.Fatal("expected error for empty virtualbox path")
+		t.Fatal("expected error for empty qemu path")
 	}
 }
 
-func TestImageStore_SetVirtualBoxPath(t *testing.T) {
+func TestImageStore_SetQEMUPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "images.json")
 	store := vm.NewImageStore(path)
 
-	if err := store.SetVirtualBoxPath("my-profile", "/data/images/my-profile.ova"); err != nil {
-		t.Fatalf("SetVirtualBoxPath: %v", err)
+	if err := store.SetQEMUPath("my-profile", "/data/images/my-profile.qcow2"); err != nil {
+		t.Fatalf("SetQEMUPath: %v", err)
 	}
 
-	got, err := store.GetVirtualBoxPath("my-profile")
+	got, err := store.GetQEMUPath("my-profile")
 	if err != nil {
-		t.Fatalf("GetVirtualBoxPath after set: %v", err)
+		t.Fatalf("GetQEMUPath after set: %v", err)
 	}
-	if got != "/data/images/my-profile.ova" {
-		t.Errorf("got %q, want %q", got, "/data/images/my-profile.ova")
+	if got != "/data/images/my-profile.qcow2" {
+		t.Errorf("got %q, want %q", got, "/data/images/my-profile.qcow2")
 	}
 }
 
@@ -90,8 +90,8 @@ func TestImageStore_List_Empty(t *testing.T) {
 func TestImageStore_List_ReturnsAll(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"profile-a": {vm.ProviderVirtualBox: "/data/images/a.ova"},
-		"profile-b": {vm.ProviderVirtualBox: "/data/images/b.ova"},
+		"profile-a": {vm.ProviderQEMU: "/data/images/a.qcow2"},
+		"profile-b": {vm.ProviderQEMU: "/data/images/b.qcow2"},
 	})
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
 	entries, err := store.List()
@@ -103,12 +103,12 @@ func TestImageStore_List_ReturnsAll(t *testing.T) {
 	}
 	seen := make(map[string]string)
 	for _, e := range entries {
-		seen[e.ProfileName] = e.VirtualBox
+		seen[e.ProfileName] = e.QEMU
 	}
-	if seen["profile-a"] != "/data/images/a.ova" {
+	if seen["profile-a"] != "/data/images/a.qcow2" {
 		t.Errorf("profile-a: got %q", seen["profile-a"])
 	}
-	if seen["profile-b"] != "/data/images/b.ova" {
+	if seen["profile-b"] != "/data/images/b.qcow2" {
 		t.Errorf("profile-b: got %q", seen["profile-b"])
 	}
 }
