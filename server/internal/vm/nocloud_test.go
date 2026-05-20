@@ -92,11 +92,15 @@ func TestBuildUserData_ContainsCallbackRuncmd(t *testing.T) {
 	if !strings.Contains(ud, "runcmd") {
 		t.Errorf("user-data missing runcmd section")
 	}
-	if !strings.Contains(ud, "http://server:8080/sessions/sess-1/ip") {
-		t.Errorf("user-data missing callback URL in runcmd")
-	}
-	if !strings.Contains(ud, "curl -sf -X POST") {
+	if !strings.Contains(ud, "curl -f --retry") {
 		t.Errorf("runcmd missing POST curl command")
+	}
+	// Callback uses the VM's default gateway so it works behind NAT (e.g. Apple VZ).
+	if !strings.Contains(ud, "ip route show default") {
+		t.Errorf("runcmd should discover the default gateway")
+	}
+	if !strings.Contains(ud, ":8080/sessions/sess-1/ip") {
+		t.Errorf("runcmd should include port and path from callback URL")
 	}
 	if !strings.Contains(ud, `\"ip\":\"$IP\"`) {
 		t.Errorf("runcmd missing ip payload")

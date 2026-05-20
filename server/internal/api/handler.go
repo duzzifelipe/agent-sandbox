@@ -189,6 +189,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := h.sessions.Start(r.Context(), req.ProfileName)
 	if err != nil {
+		log.Printf("createSession %s: %v", req.ProfileName, err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

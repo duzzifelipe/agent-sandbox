@@ -181,7 +181,7 @@ func TestBuildVirtualBox_PassesCorrectArgs(t *testing.T) {
 
 	argsStr := strings.Join(fake.capturedArgs, " ")
 
-	if !strings.Contains(argsStr, "-var=iso_url=https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso") {
+	if !strings.Contains(argsStr, "-var=iso_url=https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-live-server-amd64.iso") {
 		t.Errorf("expected iso_url arg, got args: %v", fake.capturedArgs)
 	}
 	if !strings.Contains(argsStr, "-var=vm_name=test-profile") {
@@ -266,7 +266,7 @@ func TestBuildAppleVZ_PassesCorrectArgs(t *testing.T) {
 	if !strings.Contains(argsStr, "-var=vm_name=arm-profile") {
 		t.Errorf("expected vm_name arg, got args: %v", fake.capturedArgs)
 	}
-	if !strings.Contains(argsStr, "ubuntu-24.04.2-live-server-arm64.iso") {
+	if !strings.Contains(argsStr, "ubuntu-24.04.4-live-server-arm64.iso") {
 		t.Errorf("expected arm64 iso_url, got args: %v", fake.capturedArgs)
 	}
 }

@@ -3,6 +3,7 @@ package vm
 import (
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,14 +68,29 @@ write_files:
 `, authorizedKey, encodedKey, serverURL, sessionID, profileName)
 
 	if vmCallbackURL != "" {
+		// Build the callback URL using the VM's default gateway as the host.
+		// This handles NAT networking (e.g. Apple VZ) where the host is reachable
+		// via the gateway rather than via the server URL's literal hostname.
+		u, _ := url.Parse(vmCallbackURL)
+		portSuffix := ""
+		if p := u.Port(); p != "" {
+			portSuffix = ":" + p
+		}
+		callbackPath := u.Path
 		ud += fmt.Sprintf(`runcmd:
   - |
-    IP=$(ip -4 addr show | awk '/inet / && !/127\./ {split($2,a,"/"); print a[1]; exit}')
-    [ -z "$IP" ] && exit 0
-    curl -sf -X POST %s \
+    for i in $(seq 1 36); do
+      GW=$(ip route show default | awk '/^default/ {print $3; exit}')
+      IP=$(ip -4 addr show | awk '/inet / && !/127\./ {split($2,a,"/"); print a[1]; exit}')
+      [ -n "$GW" ] && [ -n "$IP" ] && break
+      sleep 5
+    done
+    [ -z "$GW" ] || [ -z "$IP" ] && exit 1
+    curl -f --retry 5 --retry-delay 5 --retry-all-errors \
+      -X POST "http://${GW}%s%s" \
       -H 'Content-Type: application/json' \
       -d "{\"ip\":\"$IP\"}"
-`, vmCallbackURL)
+`, portSuffix, callbackPath)
 	}
 	return ud
 }

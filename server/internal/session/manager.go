@@ -13,7 +13,7 @@ import (
 
 const (
 	pollInterval = 5 * time.Second
-	pollTimeout  = 2 * time.Minute
+	pollTimeout  = 10 * time.Minute
 )
 
 // Manager orchestrates session start and stop, delegating VM calls to a VMProvider.
@@ -126,12 +126,21 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 
 	for {
 		v, err := m.provider.GetVM(ctx, vmID)
-		if err == nil && v.State == vm.VMStateRunning && v.IPAddress != "" {
-			_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress)
-			return
-		}
 		if err != nil {
 			log.Printf("session %s: GetVM error: %v", sessionID, err)
+		} else {
+			log.Printf("session %s: VM state=%s ip=%q", sessionID, v.State, v.IPAddress)
+			if v.State == vm.VMStateRunning {
+				_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress)
+				return
+			}
+			// Fail fast if the VM has stopped or errored rather than waiting for timeout.
+			if v.State == vm.VMStateStopped {
+				log.Printf("session %s: VM stopped unexpectedly", sessionID)
+				_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
+				_ = m.provider.DestroyVM(context.Background(), vmID)
+				return
+			}
 		}
 		select {
 		case <-ctx.Done():

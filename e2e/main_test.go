@@ -72,6 +72,28 @@ func run(m *testing.M) int {
 		}
 	}
 
+	// On darwin/arm64, sign the server binary with the Apple Virtualization
+	// entitlement so it can create VMs without requiring root.
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		entPath := filepath.Join(tmpDir, "entitlements.plist")
+		const vzEntitlements = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.virtualization</key>
+	<true/>
+</dict>
+</plist>`
+		if err := os.WriteFile(entPath, []byte(vzEntitlements), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "write entitlements: %v\n", err)
+			return 1
+		}
+		sign := exec.Command("codesign", "--entitlements", entPath, "-f", "-s", "-", serverPath)
+		if out, err := sign.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "codesign failed (VM tests may fail): %v\n%s\n", err, out)
+		}
+	}
+
 	port, err := freePort()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "free port: %v\n", err)

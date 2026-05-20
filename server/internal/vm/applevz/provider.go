@@ -5,8 +5,8 @@ package applevz
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -90,8 +90,7 @@ func (p *Provider) CreateVM(ctx context.Context, req vm.CreateVMRequest) (*vm.VM
 	return &vm.VM{ID: vmName, State: vm.VMStateStarting}, nil
 }
 
-// GetVM returns the current state of the VM. Returns VMStateRunning only when
-// both the VZ machine state is Running AND an IP has been registered via RegisterIP.
+// GetVM returns the current state of the VM.
 func (p *Provider) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	p.mu.Lock()
 	vzVM, ok := p.vms[vmID]
@@ -103,9 +102,6 @@ func (p *Provider) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	}
 
 	state := mapState(vzVM.State())
-	if state == vm.VMStateRunning && ip == "" {
-		state = vm.VMStateStarting
-	}
 	return &vm.VM{ID: vmID, State: state, IPAddress: ip}, nil
 }
 
@@ -204,17 +200,12 @@ func mapState(s vz.VirtualMachineState) string {
 	}
 }
 
+// copyFile uses macOS cp which leverages APFS clonefileat(2) for a near-instant
+// copy-on-write clone, avoiding a full read/write of the disk image.
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	out, err := exec.Command("cp", src, dst).CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w\n%s", err, out)
 	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	return nil
 }
