@@ -125,12 +125,6 @@ func TestWriteOrchestrationScript_ContainsBashCalls(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 func testBuilder(t *testing.T, fake *fakeRunner) *Builder {
 	t.Helper()

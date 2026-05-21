@@ -144,9 +144,6 @@ func (b *Builder) ensureCloudImage(ctx context.Context, url, checksum, destPath 
 
 func packerSeedUserData(publicKey string) string {
 	return fmt.Sprintf(`#cloud-config
-bootcmd:
-  - mkdir -p /root/.ssh
-  - chmod 700 /root/.ssh
 write_files:
   - path: /root/.ssh/authorized_keys
     permissions: '0600'
@@ -275,6 +272,8 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 		if err != nil {
 			return "", fmt.Errorf("copy efi vars: %w", err)
 		}
+	}
+	if efiVarsPath != "" {
 		defer os.Remove(efiVarsPath)
 	}
 
