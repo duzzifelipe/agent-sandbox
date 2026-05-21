@@ -61,7 +61,7 @@ func runServe() {
 	sessionStore := session.NewStore(conn)
 	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret, serverURL)
 
-	imageBuilder := builder.New(vmDir, filepath.Join(dataDir, "images"), images)
+	imageBuilder := builder.New(vmDir, filepath.Join(dataDir, "images"), filepath.Join(dataDir, "iso"), images)
 
 	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 

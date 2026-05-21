@@ -2,11 +2,16 @@ package builder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"text/template"
 
 	"github.com/duck-labs/agentsdx-server/internal/vm"
@@ -30,36 +35,117 @@ func (r *realPackerRunner) Run(ctx context.Context, workDir string, args []strin
 
 // Builder orchestrates Packer image builds.
 type Builder struct {
-	vmDir     string // host path to vm/ directory
-	outputDir string // host path where OVA files are written
-	images    *vm.ImageStore
-	runner    PackerRunner
+	vmDir         string
+	outputDir     string
+	isoDir        string
+	images        *vm.ImageStore
+	runner        PackerRunner
+	imageRegistry map[string]map[string]cloudImageEntry // nil = use cloudImageRegistry
 }
 
-func New(vmDir, outputDir string, images *vm.ImageStore) *Builder {
+func New(vmDir, outputDir, isoDir string, images *vm.ImageStore) *Builder {
 	return &Builder{
 		vmDir:     vmDir,
 		outputDir: outputDir,
+		isoDir:    isoDir,
 		images:    images,
 		runner:    &realPackerRunner{},
 	}
 }
 
-// isoRegistry maps base OS names to ISO URL + checksum, keyed by GOARCH.
-var isoRegistry = map[string]map[string]struct {
+type cloudImageEntry struct {
 	URL      string
 	Checksum string
-}{
+}
+
+var cloudImageRegistry = map[string]map[string]cloudImageEntry{
 	"ubuntu-24.04": {
 		"amd64": {
-			URL:      "https://releases.ubuntu.com/noble/ubuntu-24.04.4-live-server-amd64.iso",
-			Checksum: "sha256:e907d92eeec9df64163a7e454cbc8d7755e8ddc7ed42f99dbc80c40f1a138433",
+			URL:      "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
+			Checksum: "sha256:6e7016f2c9f4d3c00f48789eb6b9043ba2172ccc1b6b1eaf3ed1e29dd3e52bb3",
 		},
 		"arm64": {
-			URL:      "https://cdimage.ubuntu.com/releases/noble/release/ubuntu-24.04.4-live-server-arm64.iso",
-			Checksum: "sha256:9a6ce6d7e66c8abed24d24944570a495caca80b3b0007df02818e13829f27f32",
+			URL:      "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img",
+			Checksum: "sha256:c7eff9b3ee6e7b212882e680a9e06cac939107fbf5298384340a0ad1c667a38a",
 		},
 	},
+}
+
+func verifyChecksum(path, expected string) error {
+	parts := strings.SplitN(expected, ":", 2)
+	if len(parts) != 2 || parts[0] != "sha256" {
+		return fmt.Errorf("unsupported checksum format %q", expected)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != parts[1] {
+		return fmt.Errorf("checksum mismatch: want %s, got %s", parts[1], actual)
+	}
+	return nil
+}
+
+func downloadFile(ctx context.Context, url, destPath string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+	}
+	f, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
+
+func (b *Builder) ensureCloudImage(ctx context.Context, url, checksum, destPath string) error {
+	if _, err := os.Stat(destPath); err == nil {
+		if verifyChecksum(destPath, checksum) == nil {
+			return nil
+		}
+	}
+	tmpPath := destPath + ".tmp"
+	if err := downloadFile(ctx, url, tmpPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("download: %w", err)
+	}
+	if err := verifyChecksum(tmpPath, checksum); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("verify: %w", err)
+	}
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("save: %w", err)
+	}
+	return nil
+}
+
+func packerSeedUserData(publicKey string) string {
+	return fmt.Sprintf(`#cloud-config
+bootcmd:
+  - mkdir -p /root/.ssh
+  - chmod 700 /root/.ssh
+write_files:
+  - path: /root/.ssh/authorized_keys
+    permissions: '0600'
+    content: %s
+`, strings.TrimSpace(publicKey))
 }
 
 // composeScripts returns the ordered list of in-VM provisioning script paths
@@ -116,11 +202,15 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 // ImageStore, and cleans up the temp file.
 func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (string, error) {
 	arch := runtime.GOARCH // "arm64" or "amd64"
-	archISOs, ok := isoRegistry[profile.Infrastructure.Image]
+	registry := b.imageRegistry
+	if registry == nil {
+		registry = cloudImageRegistry
+	}
+	archImages, ok := registry[profile.Infrastructure.Image]
 	if !ok {
 		return "", fmt.Errorf("unknown base image %q", profile.Infrastructure.Image)
 	}
-	iso, ok := archISOs[arch]
+	iso, ok := archImages[arch]
 	if !ok {
 		return "", fmt.Errorf("no ISO for %s/%s", profile.Infrastructure.Image, arch)
 	}

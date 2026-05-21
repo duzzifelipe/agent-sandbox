@@ -2,6 +2,8 @@ package builder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -167,15 +169,15 @@ func TestBuildQEMU_PassesCorrectArgs(t *testing.T) {
 	argsStr := strings.Join(fake.capturedArgs, " ")
 
 	arch := runtime.GOARCH
-	expectedISO := isoRegistry["ubuntu-24.04"][arch].URL
+	expectedISO := cloudImageRegistry["ubuntu-24.04"][arch].URL
 	if !strings.Contains(argsStr, "-var=iso_url="+expectedISO) {
 		t.Errorf("expected iso_url=%s arg, got args: %v", expectedISO, fake.capturedArgs)
 	}
 	if !strings.Contains(argsStr, "-var=vm_name=test-profile") {
 		t.Errorf("expected vm_name arg, got args: %v", fake.capturedArgs)
 	}
-	if !strings.Contains(argsStr, "-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh") {
-		t.Errorf("expected provision_script arg, got args: %v", fake.capturedArgs)
+	if !strings.Contains(argsStr, "-var=provision_script=") || !strings.Contains(argsStr, "orchestrate.sh") {
+		t.Errorf("expected provision_script=<path>/orchestrate.sh arg, got args: %v", fake.capturedArgs)
 	}
 	if !strings.Contains(argsStr, "qemu.pkr.hcl") {
 		t.Errorf("expected qemu.pkr.hcl template, got args: %v", fake.capturedArgs)
@@ -216,6 +218,45 @@ func TestBuildQEMU_PackerFailure_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "packer build") {
 		t.Errorf("expected 'packer build' in error message, got: %v", err)
+	}
+}
+
+func TestVerifyChecksum(t *testing.T) {
+	content := []byte("hello agentsdx")
+	f, err := os.CreateTemp("", "checksum-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Write(content)
+	f.Close()
+
+	h := sha256.New()
+	h.Write(content)
+	good := "sha256:" + hex.EncodeToString(h.Sum(nil))
+
+	if err := verifyChecksum(f.Name(), good); err != nil {
+		t.Fatalf("expected no error for correct checksum, got: %v", err)
+	}
+	if err := verifyChecksum(f.Name(), "sha256:deadbeef"); err == nil {
+		t.Fatal("expected error for wrong checksum, got nil")
+	}
+	if err := verifyChecksum(f.Name(), "md5:abc123"); err == nil {
+		t.Fatal("expected error for unsupported checksum format, got nil")
+	}
+}
+
+func TestPackerSeedUserData(t *testing.T) {
+	pubKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest"
+	data := packerSeedUserData(pubKey)
+	if !strings.HasPrefix(data, "#cloud-config") {
+		t.Errorf("expected #cloud-config header, got: %q", data[:min(20, len(data))])
+	}
+	if !strings.Contains(data, "/root/.ssh/authorized_keys") {
+		t.Error("expected authorized_keys path in user-data")
+	}
+	if !strings.Contains(data, pubKey) {
+		t.Error("expected public key content in user-data")
 	}
 }
 
