@@ -148,10 +148,11 @@ func (b *Builder) ensureCloudImage(ctx context.Context, url, checksum, destPath 
 
 func packerSeedUserData(publicKey string) string {
 	return fmt.Sprintf(`#cloud-config
-write_files:
-  - path: /root/.ssh/authorized_keys
-    permissions: '0600'
-    content: "%s"
+bootcmd:
+  - mkdir -p /root/.ssh
+  - chmod 700 /root/.ssh
+ssh_authorized_keys:
+  - "%s"
 `, strings.TrimSpace(publicKey))
 }
 
