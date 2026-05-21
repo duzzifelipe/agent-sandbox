@@ -246,7 +246,9 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 		privKeyFile.Close()
 		return "", fmt.Errorf("write packer key: %w", err)
 	}
-	privKeyFile.Close()
+	if err := privKeyFile.Close(); err != nil {
+		return "", fmt.Errorf("close packer key file: %w", err)
+	}
 	if err := os.Chmod(privKeyPath, 0o600); err != nil {
 		return "", fmt.Errorf("chmod packer key: %w", err)
 	}
@@ -335,12 +337,17 @@ func copyEFIVars() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create efi vars temp: %w", err)
 	}
-	defer tmpF.Close()
 	if _, err := io.Copy(tmpF, srcF); err != nil {
+		tmpF.Close()
 		os.Remove(tmpF.Name())
 		return "", fmt.Errorf("copy efi vars: %w", err)
 	}
-	return tmpF.Name(), nil
+	name := tmpF.Name()
+	if err := tmpF.Close(); err != nil {
+		os.Remove(name)
+		return "", fmt.Errorf("close efi vars temp: %w", err)
+	}
+	return name, nil
 }
 
 // qemuPackerVars returns architecture-specific Packer variable overrides.
