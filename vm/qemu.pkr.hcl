@@ -85,7 +85,7 @@ source "qemu" "vm" {
   machine_type         = var.machine_type
   cpu_model            = var.cpu_model
   accelerator          = "hvf"
-  disk_size            = "20480M"
+  disk_size            = "3584M"
   memory               = 2048
   cpus                 = 2
   headless             = true
