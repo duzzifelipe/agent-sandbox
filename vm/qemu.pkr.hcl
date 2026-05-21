@@ -71,7 +71,7 @@ locals {
   efi_vars_args = var.efi_firmware_vars != "" ? [
     ["-drive", "if=pflash,format=raw,file=${var.efi_firmware_vars}"]
   ] : []
-  seed_args    = [["-drive", "file=${var.seed_iso_path},media=cdrom,readonly=on"]]
+  seed_args    = [["-drive", "file=${var.seed_iso_path},format=raw,if=virtio"]]
   all_qemuargs = concat(local.efi_code_args, local.efi_vars_args, local.seed_args)
 }
 
@@ -88,6 +88,7 @@ source "qemu" "vm" {
   memory               = 2048
   cpus                 = 2
   headless             = true
+  vnc_password         = "demo"
   ssh_username         = "root"
   ssh_private_key_file = var.ssh_private_key_file
   ssh_timeout          = "10m"
