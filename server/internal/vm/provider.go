@@ -1,3 +1,4 @@
+// Package vm defines the VMProvider and ImageProvider interfaces and their supporting types.
 package vm
 
 import "context"
