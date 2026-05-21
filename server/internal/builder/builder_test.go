@@ -132,19 +132,45 @@ func min(a, b int) int {
 	return b
 }
 
-func TestBuildQEMU_PassesCorrectArgs(t *testing.T) {
+func testBuilder(t *testing.T, fake *fakeRunner) *Builder {
+	t.Helper()
 	vmDir := t.TempDir()
 	outputDir := t.TempDir()
+	isoDir := t.TempDir()
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
 	imageStore := vm.NewImageStore(imagesPath)
 
-	fake := &fakeRunner{vmDir: vmDir}
-	b := &Builder{
+	imgFilename := "noble-server-cloudimg-" + runtime.GOARCH + ".img"
+	testContent := []byte("fake-cloud-image")
+	h := sha256.New()
+	h.Write(testContent)
+	checksum := "sha256:" + hex.EncodeToString(h.Sum(nil))
+	if err := os.WriteFile(filepath.Join(isoDir, imgFilename), testContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fake.vmDir = vmDir
+	return &Builder{
 		vmDir:     vmDir,
 		outputDir: outputDir,
+		isoDir:    isoDir,
 		images:    imageStore,
 		runner:    fake,
+		imageRegistry: map[string]map[string]cloudImageEntry{
+			"ubuntu-24.04": {
+				runtime.GOARCH: {
+					URL:      "https://example.com/" + imgFilename,
+					Checksum: checksum,
+				},
+			},
+		},
+		copyEFIVarsFn: func() (string, error) { return "", nil },
 	}
+}
+
+func TestBuildQEMU_PassesCorrectArgs(t *testing.T) {
+	fake := &fakeRunner{}
+	b := testBuilder(t, fake)
 
 	profile := types.ProfileSpec{
 		Name: "test-profile",
@@ -152,54 +178,35 @@ func TestBuildQEMU_PassesCorrectArgs(t *testing.T) {
 			Image:   "ubuntu-24.04",
 			Tooling: []string{},
 		},
-		Agent: types.AgentConfig{
-			Provider: "claude",
-		},
+		Agent: types.AgentConfig{Provider: "claude"},
 	}
 
 	_, err := b.BuildQEMU(context.Background(), profile)
 	if err != nil {
 		t.Fatalf("BuildQEMU: %v", err)
 	}
-
 	if fake.readErr != nil {
 		t.Fatalf("fakeRunner failed to read orchestrate.sh: %v", fake.readErr)
 	}
 
 	argsStr := strings.Join(fake.capturedArgs, " ")
-
-	arch := runtime.GOARCH
-	expectedISO := cloudImageRegistry["ubuntu-24.04"][arch].URL
-	if !strings.Contains(argsStr, "-var=iso_url="+expectedISO) {
-		t.Errorf("expected iso_url=%s arg, got args: %v", expectedISO, fake.capturedArgs)
-	}
-	if !strings.Contains(argsStr, "-var=vm_name=test-profile") {
-		t.Errorf("expected vm_name arg, got args: %v", fake.capturedArgs)
-	}
-	if !strings.Contains(argsStr, "-var=provision_script=") || !strings.Contains(argsStr, "orchestrate.sh") {
-		t.Errorf("expected provision_script=<path>/orchestrate.sh arg, got args: %v", fake.capturedArgs)
-	}
-	if !strings.Contains(argsStr, "qemu.pkr.hcl") {
-		t.Errorf("expected qemu.pkr.hcl template, got args: %v", fake.capturedArgs)
+	for _, want := range []string{
+		"-var=cloud_image_path=",
+		"-var=seed_iso_path=",
+		"-var=ssh_private_key_file=",
+		"-var=vm_name=test-profile",
+		"-var=provision_script=",
+		"qemu.pkr.hcl",
+	} {
+		if !strings.Contains(argsStr, want) {
+			t.Errorf("expected arg containing %q, got args: %v", want, fake.capturedArgs)
+		}
 	}
 }
 
 func TestBuildQEMU_PackerFailure_ReturnsError(t *testing.T) {
-	vmDir := t.TempDir()
-	outputDir := t.TempDir()
-	imagesPath := filepath.Join(t.TempDir(), "images.json")
-	imageStore := vm.NewImageStore(imagesPath)
-
-	fake := &fakeRunner{
-		vmDir: vmDir,
-		err:   errors.New("packer failed"),
-	}
-	b := &Builder{
-		vmDir:     vmDir,
-		outputDir: outputDir,
-		images:    imageStore,
-		runner:    fake,
-	}
+	fake := &fakeRunner{err: errors.New("packer failed")}
+	b := testBuilder(t, fake)
 
 	profile := types.ProfileSpec{
 		Name: "failure-profile",
@@ -207,9 +214,7 @@ func TestBuildQEMU_PackerFailure_ReturnsError(t *testing.T) {
 			Image:   "ubuntu-24.04",
 			Tooling: []string{},
 		},
-		Agent: types.AgentConfig{
-			Provider: "claude",
-		},
+		Agent: types.AgentConfig{Provider: "claude"},
 	}
 
 	_, err := b.BuildQEMU(context.Background(), profile)
@@ -261,27 +266,15 @@ func TestPackerSeedUserData(t *testing.T) {
 }
 
 func TestBuildQEMU_UnknownImage_ReturnsError(t *testing.T) {
-	vmDir := t.TempDir()
-	outputDir := t.TempDir()
-	imagesPath := filepath.Join(t.TempDir(), "images.json")
-	imageStore := vm.NewImageStore(imagesPath)
-
-	fake := &fakeRunner{vmDir: vmDir}
-	b := &Builder{
-		vmDir:     vmDir,
-		outputDir: outputDir,
-		images:    imageStore,
-		runner:    fake,
-	}
+	fake := &fakeRunner{}
+	b := testBuilder(t, fake)
 
 	profile := types.ProfileSpec{
 		Name: "test-profile",
 		Infrastructure: types.InfrastructureConfig{
 			Image: "unknown-os-9.9",
 		},
-		Agent: types.AgentConfig{
-			Provider: "claude",
-		},
+		Agent: types.AgentConfig{Provider: "claude"},
 	}
 
 	_, err := b.BuildQEMU(context.Background(), profile)

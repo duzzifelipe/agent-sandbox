@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/duck-labs/agentsdx-server/internal/vault"
 	"github.com/duck-labs/agentsdx-server/internal/vm"
 	"github.com/duck-labs/agentsdx-shared/types"
 )
@@ -35,12 +36,13 @@ func (r *realPackerRunner) Run(ctx context.Context, workDir string, args []strin
 
 // Builder orchestrates Packer image builds.
 type Builder struct {
-	vmDir         string
-	outputDir     string
-	isoDir        string
-	images        *vm.ImageStore
-	runner        PackerRunner
-	imageRegistry map[string]map[string]cloudImageEntry // nil = use cloudImageRegistry
+	vmDir          string
+	outputDir      string
+	isoDir         string
+	images         *vm.ImageStore
+	runner         PackerRunner
+	imageRegistry  map[string]map[string]cloudImageEntry // nil = use cloudImageRegistry
+	copyEFIVarsFn  func() (string, error)                // nil = use copyEFIVars
 }
 
 func New(vmDir, outputDir, isoDir string, images *vm.ImageStore) *Builder {
@@ -202,23 +204,79 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 }
 
 // BuildQEMU builds a QEMU qcow2 image for the given profile using the host architecture.
-// It generates a temp orchestration script, invokes Packer, stores the image path in
-// ImageStore, and cleans up the temp file.
+// It downloads/caches the cloud image, generates an ephemeral SSH key pair, writes a
+// cloud-init seed ISO, generates a temp orchestration script, invokes Packer, stores the
+// image path in ImageStore, and cleans up temp files.
 func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (string, error) {
-	arch := runtime.GOARCH // "arm64" or "amd64"
-	registry := b.imageRegistry
-	if registry == nil {
-		registry = cloudImageRegistry
+	arch := runtime.GOARCH
+
+	reg := cloudImageRegistry
+	if b.imageRegistry != nil {
+		reg = b.imageRegistry
 	}
-	archImages, ok := registry[profile.Infrastructure.Image]
+	archImages, ok := reg[profile.Infrastructure.Image]
 	if !ok {
 		return "", fmt.Errorf("unknown base image %q", profile.Infrastructure.Image)
 	}
-	iso, ok := archImages[arch]
+	img, ok := archImages[arch]
 	if !ok {
-		return "", fmt.Errorf("no ISO for %s/%s", profile.Infrastructure.Image, arch)
+		return "", fmt.Errorf("no cloud image for %s/%s", profile.Infrastructure.Image, arch)
 	}
 
+	// Resolve cloud image (download if not cached).
+	parts := strings.Split(img.URL, "/")
+	filename := parts[len(parts)-1]
+	cloudImagePath := filepath.Join(b.isoDir, filename)
+	if err := b.ensureCloudImage(ctx, img.URL, img.Checksum, cloudImagePath); err != nil {
+		return "", fmt.Errorf("ensure cloud image: %w", err)
+	}
+
+	// Ephemeral SSH key pair for Packer.
+	privKey, pubKey, err := vault.GenerateKeyPair()
+	if err != nil {
+		return "", fmt.Errorf("generate packer key pair: %w", err)
+	}
+	privKeyFile, err := os.CreateTemp("", "agentsdx-packer-key-*")
+	if err != nil {
+		return "", fmt.Errorf("create packer key file: %w", err)
+	}
+	privKeyPath := privKeyFile.Name()
+	defer os.Remove(privKeyPath)
+	if _, err := privKeyFile.WriteString(privKey); err != nil {
+		privKeyFile.Close()
+		return "", fmt.Errorf("write packer key: %w", err)
+	}
+	privKeyFile.Close()
+	if err := os.Chmod(privKeyPath, 0o600); err != nil {
+		return "", fmt.Errorf("chmod packer key: %w", err)
+	}
+
+	// Cloud-init seed ISO so Packer can SSH into the cloud image.
+	seedDir, err := os.MkdirTemp("", "agentsdx-seed-*")
+	if err != nil {
+		return "", fmt.Errorf("create seed dir: %w", err)
+	}
+	defer os.RemoveAll(seedDir)
+	seedISOPath, err := vm.WriteNoCloudISO(seedDir, vm.NoCloudMetaData("packer"), packerSeedUserData(pubKey))
+	if err != nil {
+		return "", fmt.Errorf("write seed iso: %w", err)
+	}
+
+	// Writable EFI vars copy (ARM64 only).
+	efiVarsPath := ""
+	if arch == "arm64" {
+		copyFn := b.copyEFIVarsFn
+		if copyFn == nil {
+			copyFn = copyEFIVars
+		}
+		efiVarsPath, err = copyFn()
+		if err != nil {
+			return "", fmt.Errorf("copy efi vars: %w", err)
+		}
+		defer os.Remove(efiVarsPath)
+	}
+
+	// Orchestration script.
 	scripts := composeScripts(profile)
 	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
 	if err != nil {
@@ -246,8 +304,10 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 	args := []string{
 		"build",
 		fmt.Sprintf("-var=vm_name=%s", profile.Name),
-		fmt.Sprintf("-var=iso_url=%s", iso.URL),
-		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
+		fmt.Sprintf("-var=cloud_image_path=%s", cloudImagePath),
+		fmt.Sprintf("-var=seed_iso_path=%s", seedISOPath),
+		fmt.Sprintf("-var=ssh_private_key_file=%s", privKeyPath),
+		fmt.Sprintf("-var=efi_firmware_vars=%s", efiVarsPath),
 		fmt.Sprintf("-var=provision_script=%s", orchDestAbs),
 		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
 	}
@@ -262,6 +322,25 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 		return "", fmt.Errorf("store image reference: %w", err)
 	}
 	return imagePath, nil
+}
+
+func copyEFIVars() (string, error) {
+	src := "/opt/homebrew/share/qemu/edk2-aarch64-vars.fd"
+	srcF, err := os.Open(src)
+	if err != nil {
+		return "", fmt.Errorf("open efi vars: %w", err)
+	}
+	defer srcF.Close()
+	tmpF, err := os.CreateTemp("", "agentsdx-efi-vars-*")
+	if err != nil {
+		return "", fmt.Errorf("create efi vars temp: %w", err)
+	}
+	defer tmpF.Close()
+	if _, err := io.Copy(tmpF, srcF); err != nil {
+		os.Remove(tmpF.Name())
+		return "", fmt.Errorf("copy efi vars: %w", err)
+	}
+	return tmpF.Name(), nil
 }
 
 // qemuPackerVars returns architecture-specific Packer variable overrides.
