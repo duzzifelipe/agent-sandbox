@@ -231,6 +231,10 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 	if err := b.ensureCloudImage(ctx, img.URL, img.Checksum, cloudImagePath); err != nil {
 		return "", fmt.Errorf("ensure cloud image: %w", err)
 	}
+	cloudImagePath, err := filepath.Abs(cloudImagePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve cloud image path: %w", err)
+	}
 
 	// Ephemeral SSH key pair for Packer.
 	privKey, pubKey, err := vault.GenerateKeyPair()
