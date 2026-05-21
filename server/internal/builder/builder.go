@@ -334,6 +334,10 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 func copyEFIVars() (string, error) {
 	src := "/opt/homebrew/share/qemu/edk2-aarch64-vars.fd"
 	srcF, err := os.Open(src)
+	if os.IsNotExist(err) {
+		// No aarch64 vars file in this QEMU build; the code firmware alone is sufficient.
+		return "", nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("open efi vars: %w", err)
 	}
