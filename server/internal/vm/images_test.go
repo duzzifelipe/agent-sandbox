@@ -112,3 +112,43 @@ func TestImageStore_List_ReturnsAll(t *testing.T) {
 		t.Errorf("profile-b: got %q", seen["profile-b"])
 	}
 }
+
+func TestImageStore_SetAndGetHetznerSnapshotID(t *testing.T) {
+	dir := t.TempDir()
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+
+	if err := store.SetHetznerSnapshotID("my-profile", "98765"); err != nil {
+		t.Fatalf("SetHetznerSnapshotID: %v", err)
+	}
+
+	got, err := store.GetHetznerSnapshotID("my-profile")
+	if err != nil {
+		t.Fatalf("GetHetznerSnapshotID: %v", err)
+	}
+	if got != "98765" {
+		t.Errorf("got %q, want %q", got, "98765")
+	}
+}
+
+func TestImageStore_GetHetznerSnapshotID_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+
+	_, err := store.GetHetznerSnapshotID("missing")
+	if err == nil {
+		t.Fatal("expected error for missing profile")
+	}
+}
+
+func TestImageStore_GetHetznerSnapshotID_Empty(t *testing.T) {
+	dir := t.TempDir()
+	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
+		"no-snapshot": {vm.ProviderHetzner: ""},
+	})
+	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
+
+	_, err := store.GetHetznerSnapshotID("no-snapshot")
+	if err == nil {
+		t.Fatal("expected error for empty snapshot id")
+	}
+}

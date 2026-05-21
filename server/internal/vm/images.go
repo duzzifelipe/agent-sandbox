@@ -67,6 +67,44 @@ func (s *ImageStore) SetQEMUPath(profileName, imagePath string) error {
 	return s.save(records)
 }
 
+// GetHetznerSnapshotID returns the Hetzner snapshot ID for profileName.
+func (s *ImageStore) GetHetznerSnapshotID(profileName string) (string, error) {
+	records, err := s.load()
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("no image built for profile %q: run 'images build' first", profileName)
+	}
+	if err != nil {
+		return "", fmt.Errorf("load images: %w", err)
+	}
+	rec, ok := records[profileName]
+	if !ok {
+		return "", fmt.Errorf("no image record for profile %q", profileName)
+	}
+	id := rec[ProviderHetzner]
+	if id == "" {
+		return "", fmt.Errorf("no hetzner snapshot built for profile %q", profileName)
+	}
+	return id, nil
+}
+
+// SetHetznerSnapshotID writes or updates the Hetzner snapshot ID for profileName.
+func (s *ImageStore) SetHetznerSnapshotID(profileName, snapshotID string) error {
+	records, err := s.load()
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("load images: %w", err)
+	}
+	if records == nil {
+		records = make(map[string]ImageRecord)
+	}
+	rec := records[profileName]
+	if rec == nil {
+		rec = make(ImageRecord)
+	}
+	rec[ProviderHetzner] = snapshotID
+	records[profileName] = rec
+	return s.save(records)
+}
+
 // List returns all image entries from images.json.
 // Returns an empty slice if the file does not exist yet.
 func (s *ImageStore) List() ([]types.ImageEntry, error) {
