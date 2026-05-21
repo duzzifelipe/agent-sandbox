@@ -32,6 +32,9 @@ func NewImageStore(path string) *ImageStore {
 // GetQEMUPath returns the qcow2 path for profileName or an error if absent.
 func (s *ImageStore) GetQEMUPath(profileName string) (string, error) {
 	records, err := s.load()
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("no image built for profile %q: run 'images build' first", profileName)
+	}
 	if err != nil {
 		return "", fmt.Errorf("load images: %w", err)
 	}

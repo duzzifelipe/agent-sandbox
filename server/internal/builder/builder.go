@@ -52,12 +52,12 @@ var isoRegistry = map[string]map[string]struct {
 }{
 	"ubuntu-24.04": {
 		"amd64": {
-			URL:      "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso",
-			Checksum: "sha256:d6fea3a0b8f5a53455e7fc0b2bfeadb36e72b2432f31b0b93d7e09f07f695a42",
+			URL:      "https://releases.ubuntu.com/noble/ubuntu-24.04.4-live-server-amd64.iso",
+			Checksum: "sha256:e907d92eeec9df64163a7e454cbc8d7755e8ddc7ed42f99dbc80c40f1a138433",
 		},
 		"arm64": {
-			URL:      "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso",
-			Checksum: "sha256:3c69d7f0f0b44fc82d0ec6f85694e8b7c11db11aaba1060e56f61d4bc3cbdb1b",
+			URL:      "https://cdimage.ubuntu.com/releases/noble/release/ubuntu-24.04.4-live-server-arm64.iso",
+			Checksum: "sha256:9a6ce6d7e66c8abed24d24944570a495caca80b3b0007df02818e13829f27f32",
 		},
 	},
 }
@@ -142,6 +142,11 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 	}
 	defer os.Remove(orchDest)
 
+	orchDestAbs, err := filepath.Abs(orchDest)
+	if err != nil {
+		return "", fmt.Errorf("resolve orchestration script path: %w", err)
+	}
+
 	imagePath := filepath.Join(b.outputDir, profile.Name+".qcow2")
 
 	args := []string{
@@ -149,7 +154,7 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 		fmt.Sprintf("-var=vm_name=%s", profile.Name),
 		fmt.Sprintf("-var=iso_url=%s", iso.URL),
 		fmt.Sprintf("-var=iso_checksum=%s", iso.Checksum),
-		"-var=provision_script=/tmp/agentsdx-vm/orchestrate.sh",
+		fmt.Sprintf("-var=provision_script=%s", orchDestAbs),
 		fmt.Sprintf("-var=output_dir=%s", b.outputDir),
 	}
 	args = append(args, qemuPackerVars(arch)...)

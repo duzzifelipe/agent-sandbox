@@ -38,6 +38,12 @@ func NewManager(store *Store, provider vm.VMProvider, vaultDir, vaultSecret, ser
 
 // Start creates a session, launches the VM, and returns the session ID immediately.
 func (m *Manager) Start(ctx context.Context, profileName string) (string, error) {
+	if !vault.VaultExists(m.vaultDir, profileName) {
+		if err := m.initVault(profileName); err != nil {
+			return "", fmt.Errorf("init vault: %w", err)
+		}
+	}
+
 	vaultData, err := vault.LoadVaultData(m.vaultDir, profileName, m.vaultSecret)
 	if err != nil {
 		return "", fmt.Errorf("load vault: %w", err)
@@ -107,6 +113,23 @@ func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 // callback fires after boot.
 func (m *Manager) ReportReady(sessionID, ipAddress string) error {
 	return m.store.UpdateState(sessionID, types.SessionStateRunning, ipAddress)
+}
+
+func (m *Manager) initVault(profileName string) error {
+	vmPriv, vmPub, err := vault.GenerateKeyPair()
+	if err != nil {
+		return fmt.Errorf("generate vm key pair: %w", err)
+	}
+	gitPriv, gitPub, err := vault.GenerateKeyPair()
+	if err != nil {
+		return fmt.Errorf("generate git key pair: %w", err)
+	}
+	vd := types.DefaultVaultData()
+	vd.VMAccessPrivateKey = vmPriv
+	vd.VMAccessPublicKey = vmPub
+	vd.GitPrivateKey = gitPriv
+	vd.GitPublicKey = gitPub
+	return vault.StoreVaultData(m.vaultDir, profileName, m.vaultSecret, vd)
 }
 
 func (m *Manager) pollUntilRunning(sessionID, vmID string) {

@@ -56,6 +56,7 @@ func NewHandler(
 // Router builds and returns the chi router with all routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Get("/profiles", h.listProfiles)
@@ -351,5 +352,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
+	if status >= 500 {
+		log.Printf("ERROR %d: %s", status, msg)
+	}
 	writeJSON(w, status, map[string]string{"error": msg})
 }
