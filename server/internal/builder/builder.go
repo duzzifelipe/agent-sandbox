@@ -109,9 +109,13 @@ func downloadFile(ctx context.Context, url, destPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
-	return err
+	_, copyErr := io.Copy(f, resp.Body)
+	f.Close()
+	if copyErr != nil {
+		os.Remove(destPath)
+		return copyErr
+	}
+	return nil
 }
 
 func (b *Builder) ensureCloudImage(ctx context.Context, url, checksum, destPath string) error {
@@ -144,7 +148,7 @@ bootcmd:
 write_files:
   - path: /root/.ssh/authorized_keys
     permissions: '0600'
-    content: %s
+    content: "%s"
 `, strings.TrimSpace(publicKey))
 }
 
