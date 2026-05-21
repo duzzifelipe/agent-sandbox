@@ -72,7 +72,8 @@ locals {
     ["-drive", "if=pflash,format=raw,file=${var.efi_firmware_vars}"]
   ] : []
   seed_args    = [["-drive", "file=${var.seed_iso_path},format=raw,if=virtio"]]
-  all_qemuargs = concat(local.efi_code_args, local.efi_vars_args, local.seed_args)
+  serial_args  = [["-serial", "file:/tmp/agentsdx-vm-serial.log"]]
+  all_qemuargs = concat(local.efi_code_args, local.efi_vars_args, local.seed_args, local.serial_args)
 }
 
 source "qemu" "vm" {

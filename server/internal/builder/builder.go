@@ -342,8 +342,10 @@ func copyEFIVars() (string, error) {
 	src := "/opt/homebrew/share/qemu/edk2-aarch64-vars.fd"
 	srcF, err := os.Open(src)
 	if os.IsNotExist(err) {
-		// No aarch64 vars file in this QEMU build; the code firmware alone is sufficient.
-		return "", nil
+		// QEMU 11 on Homebrew ships edk2-aarch64-code.fd but no vars file.
+		// Create an empty vars flash of the same size (64 MiB); EDK2 detects
+		// zeroed flash and initialises its variable store on first boot.
+		return createEmptyEFIVars()
 	}
 	if err != nil {
 		return "", fmt.Errorf("open efi vars: %w", err)
@@ -362,6 +364,27 @@ func copyEFIVars() (string, error) {
 	if err := tmpF.Close(); err != nil {
 		os.Remove(name)
 		return "", fmt.Errorf("close efi vars temp: %w", err)
+	}
+	return name, nil
+}
+
+// createEmptyEFIVars creates a zero-filled 64 MiB temp file for use as the
+// EDK2 AArch64 writable vars flash when no pre-built file is available.
+func createEmptyEFIVars() (string, error) {
+	const varsSize = 67108864 // 64 MiB — matches edk2-aarch64-code.fd
+	f, err := os.CreateTemp("", "agentsdx-efi-vars-*")
+	if err != nil {
+		return "", fmt.Errorf("create efi vars: %w", err)
+	}
+	if err := f.Truncate(varsSize); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", fmt.Errorf("size efi vars: %w", err)
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		os.Remove(name)
+		return "", fmt.Errorf("close efi vars: %w", err)
 	}
 	return name, nil
 }
