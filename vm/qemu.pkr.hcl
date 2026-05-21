@@ -12,19 +12,30 @@ variable "vm_name" {
   description = "VM name; used as the image filename base"
 }
 
-variable "iso_url" {
+variable "cloud_image_path" {
   type        = string
-  description = "URL or local path to the Ubuntu server ISO — supplied by the caller (see server/internal/builder/builder.go isoRegistry)"
+  description = "Local absolute path to the cached Ubuntu cloud image"
 }
 
-variable "iso_checksum" {
+variable "seed_iso_path" {
   type        = string
-  description = "sha256:<hex> checksum for iso_url — supplied by the caller"
+  description = "Local absolute path to the cloud-init seed ISO for Packer SSH access"
+}
+
+variable "ssh_private_key_file" {
+  type        = string
+  description = "Local absolute path to the ephemeral private key for Packer SSH"
+}
+
+variable "efi_firmware_vars" {
+  type        = string
+  default     = ""
+  description = "Path to a writable EDK2 vars file (ARM64 only); empty string skips this drive"
 }
 
 variable "provision_script" {
   type        = string
-  description = "Local path to the generated orchestration shell script"
+  description = "Local absolute path to the generated orchestration shell script"
 }
 
 variable "output_dir" {
@@ -32,16 +43,9 @@ variable "output_dir" {
   description = "Directory where the built qcow2 image will be written"
 }
 
-variable "ssh_password" {
-  type      = string
-  default   = "packer"
-  sensitive = true
-}
-
 variable "qemu_binary" {
-  type        = string
-  default     = "qemu-system-aarch64"
-  description = "QEMU system binary; override to qemu-system-x86_64 on Intel"
+  type    = string
+  default = "qemu-system-aarch64"
 }
 
 variable "machine_type" {
@@ -57,47 +61,41 @@ variable "cpu_model" {
 variable "efi_firmware_code" {
   type        = string
   default     = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-  description = "Path to EDK2 ARM64 firmware (Homebrew default); override for Intel"
+  description = "Path to EDK2 ARM64 firmware (read-only); empty string skips this drive"
+}
+
+locals {
+  efi_code_args = var.efi_firmware_code != "" ? [
+    ["-drive", "if=pflash,format=raw,readonly=on,file=${var.efi_firmware_code}"]
+  ] : []
+  efi_vars_args = var.efi_firmware_vars != "" ? [
+    ["-drive", "if=pflash,format=raw,file=${var.efi_firmware_vars}"]
+  ] : []
+  seed_args    = [["-drive", "file=${var.seed_iso_path},media=cdrom,readonly=on"]]
+  all_qemuargs = concat(local.efi_code_args, local.efi_vars_args, local.seed_args)
 }
 
 source "qemu" "vm" {
-  vm_name          = var.vm_name
-  iso_url          = var.iso_url
-  iso_checksum     = var.iso_checksum
-  qemu_binary      = var.qemu_binary
-  machine_type     = var.machine_type
-  cpu_model        = var.cpu_model
-  accelerator      = "hvf"
-  disk_size        = "20480M"
-  memory           = 2048
-  cpus             = 2
-  headless         = true
-  ssh_username     = "root"
-  ssh_password     = var.ssh_password
-  ssh_timeout      = "30m"
-  shutdown_command = "shutdown -P now"
+  vm_name              = var.vm_name
+  iso_url              = var.cloud_image_path
+  iso_checksum         = "none"
+  disk_image           = true
+  qemu_binary          = var.qemu_binary
+  machine_type         = var.machine_type
+  cpu_model            = var.cpu_model
+  accelerator          = "hvf"
+  disk_size            = "20480M"
+  memory               = 2048
+  cpus                 = 2
+  headless             = true
+  ssh_username         = "root"
+  ssh_private_key_file = var.ssh_private_key_file
+  ssh_timeout          = "10m"
+  shutdown_command     = "shutdown -P now"
 
-  qemuargs = [
-    ["-drive", "if=pflash,format=raw,readonly=on,file=${var.efi_firmware_code}"],
-  ]
-
-  http_content = {
-    "/user-data" = file("${path.root}/autoinstall/user-data.yaml")
-    "/meta-data" = ""
-  }
-
-  boot_wait = "5s"
-  boot_command = [
-    "c<wait>",
-    "linux /casper/vmlinuz --- autoinstall ds=\"nocloud-net;s=http://{{.HTTPIP}}:{{.HTTPPort}}/\" <wait>",
-    "<enter><wait>",
-    "initrd /casper/initrd<wait>",
-    "<enter><wait>",
-    "boot<enter>"
-  ]
+  qemuargs = local.all_qemuargs
 
   output_directory = var.output_dir
-  disk_image       = false
   format           = "qcow2"
 }
 
