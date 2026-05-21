@@ -251,8 +251,8 @@ func TestPackerSeedUserData(t *testing.T) {
 	if !strings.HasPrefix(data, "#cloud-config") {
 		t.Errorf("expected #cloud-config header, got: %q", data[:min(20, len(data))])
 	}
-	if !strings.Contains(data, "ssh_authorized_keys") {
-		t.Error("expected ssh_authorized_keys directive in user-data")
+	if !strings.Contains(data, "/root/.ssh/authorized_keys") {
+		t.Error("expected authorized_keys path in user-data")
 	}
 	if !strings.Contains(data, "mkdir -p /root/.ssh") {
 		t.Error("expected bootcmd to create /root/.ssh in user-data")

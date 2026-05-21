@@ -151,8 +151,10 @@ func packerSeedUserData(publicKey string) string {
 bootcmd:
   - mkdir -p /root/.ssh
   - chmod 700 /root/.ssh
-ssh_authorized_keys:
-  - "%s"
+write_files:
+  - path: /root/.ssh/authorized_keys
+    permissions: '0600'
+    content: "%s"
 `, strings.TrimSpace(publicKey))
 }
 
