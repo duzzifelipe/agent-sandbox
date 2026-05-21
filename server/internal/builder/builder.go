@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -123,14 +124,17 @@ func downloadFile(ctx context.Context, url, destPath string) error {
 func (b *Builder) ensureCloudImage(ctx context.Context, url, checksum, destPath string) error {
 	if _, err := os.Stat(destPath); err == nil {
 		if verifyChecksum(destPath, checksum) == nil {
+			log.Printf("cloud image cache hit: %s", filepath.Base(destPath))
 			return nil
 		}
 	}
+	log.Printf("downloading cloud image: %s", url)
 	tmpPath := destPath + ".tmp"
 	if err := downloadFile(ctx, url, tmpPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("download: %w", err)
 	}
+	log.Printf("verifying cloud image checksum")
 	if err := verifyChecksum(tmpPath, checksum); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("verify: %w", err)
@@ -315,6 +319,7 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 	args = append(args, qemuPackerVars(arch)...)
 	args = append(args, "qemu.pkr.hcl")
 
+	log.Printf("starting packer build for profile %s", profile.Name)
 	if err := b.runner.Run(ctx, b.vmDir, args); err != nil {
 		return "", fmt.Errorf("packer build: %w", err)
 	}
@@ -322,6 +327,7 @@ func (b *Builder) BuildQEMU(ctx context.Context, profile types.ProfileSpec) (str
 	if err := b.images.SetQEMUPath(profile.Name, imagePath); err != nil {
 		return "", fmt.Errorf("store image reference: %w", err)
 	}
+	log.Printf("build complete for profile %s: %s", profile.Name, imagePath)
 	return imagePath, nil
 }
 
