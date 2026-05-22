@@ -59,7 +59,8 @@ func NewHetznerProviderFromClients(servers hcloudServerOps, sshKeys hcloudSSHKey
 
 // CreateVM creates a session server from the snapshot identified by req.ImageID.
 func (p *HetznerProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM, error) {
-	keyName := fmt.Sprintf("agentsdx-session-%d", time.Now().UnixMilli())
+	ts := time.Now().UnixMilli()
+	keyName := fmt.Sprintf("agentsdx-session-%d", ts)
 	sshKey, _, err := p.sshKeys.Create(ctx, hcloud.SSHKeyCreateOpts{
 		Name:      keyName,
 		PublicKey: req.AuthorizedKey,
@@ -69,7 +70,7 @@ func (p *HetznerProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*V
 	}
 
 	result, _, err := p.servers.Create(ctx, hcloud.ServerCreateOpts{
-		Name:       fmt.Sprintf("agentsdx-session-%d", time.Now().UnixMilli()),
+		Name:       fmt.Sprintf("agentsdx-session-%d", ts),
 		ServerType: &hcloud.ServerType{Name: hetznerServerType},
 		Image:      imageRef(req.ImageID),
 		Location:   &hcloud.Location{Name: p.location},
@@ -82,9 +83,13 @@ func (p *HetznerProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*V
 		return nil, fmt.Errorf("create server: %w", err)
 	}
 
+	ip := ""
+	if result.Server.PublicNet.IPv4.IP != nil {
+		ip = result.Server.PublicNet.IPv4.IP.String()
+	}
 	return &VM{
 		ID:        strconv.FormatInt(result.Server.ID, 10),
-		IPAddress: result.Server.PublicNet.IPv4.IP.String(),
+		IPAddress: ip,
 		State:     VMStateStarting,
 	}, nil
 }
@@ -126,7 +131,8 @@ func (p *HetznerProvider) DestroyVM(ctx context.Context, vmID string) error {
 // CreateBuildVM creates a temporary server for image provisioning.
 // Blocks until hcloud reports the server as started.
 func (p *HetznerProvider) CreateBuildVM(ctx context.Context, baseImage, authorizedKey string) (*VM, error) {
-	keyName := fmt.Sprintf("agentsdx-build-%d", time.Now().UnixMilli())
+	ts := time.Now().UnixMilli()
+	keyName := fmt.Sprintf("agentsdx-build-%d", ts)
 	sshKey, _, err := p.sshKeys.Create(ctx, hcloud.SSHKeyCreateOpts{
 		Name:      keyName,
 		PublicKey: authorizedKey,
@@ -136,7 +142,7 @@ func (p *HetznerProvider) CreateBuildVM(ctx context.Context, baseImage, authoriz
 	}
 
 	result, _, err := p.servers.Create(ctx, hcloud.ServerCreateOpts{
-		Name:       fmt.Sprintf("agentsdx-build-%d", time.Now().UnixMilli()),
+		Name:       fmt.Sprintf("agentsdx-build-%d", ts),
 		ServerType: &hcloud.ServerType{Name: hetznerServerType},
 		Image:      imageRef(baseImage),
 		Location:   &hcloud.Location{Name: p.location},
@@ -156,9 +162,13 @@ func (p *HetznerProvider) CreateBuildVM(ctx context.Context, baseImage, authoriz
 		return nil, fmt.Errorf("wait for build server: %w", err)
 	}
 
+	ip := ""
+	if result.Server.PublicNet.IPv4.IP != nil {
+		ip = result.Server.PublicNet.IPv4.IP.String()
+	}
 	return &VM{
 		ID:        strconv.FormatInt(result.Server.ID, 10),
-		IPAddress: result.Server.PublicNet.IPv4.IP.String(),
+		IPAddress: ip,
 		State:     VMStateRunning,
 	}, nil
 }
@@ -195,11 +205,16 @@ func (p *HetznerProvider) deleteServerAndKey(ctx context.Context, vmID string) e
 		return nil
 	}
 	server, _, err := p.servers.GetByID(ctx, id)
-	if err != nil || server == nil {
+	if err != nil {
+		return fmt.Errorf("get server: %w", err)
+	}
+	if server == nil {
 		return nil
 	}
 	sshKeyName := server.Labels["agentsdx-sshkey"]
-	_, _ = p.servers.Delete(ctx, server)
+	if _, err := p.servers.Delete(ctx, server); err != nil {
+		return fmt.Errorf("delete server: %w", err)
+	}
 	if sshKeyName != "" {
 		if key, _, _ := p.sshKeys.GetByName(ctx, sshKeyName); key != nil {
 			_, _ = p.sshKeys.Delete(ctx, key)
