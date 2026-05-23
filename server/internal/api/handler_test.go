@@ -36,12 +36,18 @@ func newHandler(t *testing.T) (*api.Handler, string) {
 	profileStore := profile.NewStore(conn, filepath.Join(dir, "profiles"))
 
 	sessionStore := session.NewStore(conn)
-	images := vm.NewImageStore(filepath.Join(dir, "images.json"))
 
 	fakeProvider := &fakeVM{}
-	mgr := session.NewManager(sessionStore, fakeProvider, dir, "test-secret", "")
+	// sessionImages is pre-seeded so Start("dev") can resolve a snapshot ID.
+	sessionImages := vm.NewImageStore(filepath.Join(dir, "session-images.json"))
+	_ = sessionImages.SetHetznerSnapshotID("dev", "snap-1")
 
-	h := api.NewHandler(profileStore, mgr, images, &fakeBuilder{}, dir, "test-secret")
+	// handlerImages is the empty store exposed via the /images API.
+	handlerImages := vm.NewImageStore(filepath.Join(dir, "images.json"))
+
+	mgr := session.NewManager(sessionStore, fakeProvider, sessionImages, dir, "test-secret", "")
+
+	h := api.NewHandler(profileStore, mgr, handlerImages, &fakeBuilder{}, dir, "test-secret")
 	return h, dir
 }
 
@@ -51,9 +57,9 @@ type fakeBuilder struct {
 	err     error
 }
 
-func (f *fakeBuilder) BuildQEMU(_ context.Context, p types.ProfileSpec) (string, error) {
+func (f *fakeBuilder) Build(_ context.Context, p types.ProfileSpec) (string, error) {
 	f.profile = p.Name
-	return "/tmp/fake.qcow2", f.err
+	return "snap-42", f.err
 }
 
 // fakeVM satisfies vm.VMProvider for handler tests.
