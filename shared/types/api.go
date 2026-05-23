@@ -29,6 +29,5 @@ type BuildImageRequest struct {
 
 type ImageEntry struct {
 	ProfileName string `json:"profile_name"`
-	QEMU        string `json:"qemu,omitempty"`
 	Hetzner     string `json:"hetzner,omitempty"`
 }

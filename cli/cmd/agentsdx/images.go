@@ -19,7 +19,7 @@ func newImagesCmd(c *client.Client) *cobra.Command {
 func newImagesBuildCmd(c *client.Client) *cobra.Command {
 	return &cobra.Command{
 		Use:   "build <profile>",
-		Short: "Trigger a Packer image build for a profile",
+		Short: "Trigger an image build for a profile",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile := args[0]

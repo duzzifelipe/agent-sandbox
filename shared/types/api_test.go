@@ -81,8 +81,7 @@ func TestBuildImageRequest_JSON(t *testing.T) {
 func TestImageEntry_JSON(t *testing.T) {
 	entry := types.ImageEntry{
 		ProfileName: "work-backend",
-		QEMU:        "/data/images/work-backend.qcow2",
-		Hetzner:     "",
+		Hetzner:     "snap-12345",
 	}
 	data, err := json.Marshal(entry)
 	if err != nil {
@@ -92,7 +91,7 @@ func TestImageEntry_JSON(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.QEMU != "/data/images/work-backend.qcow2" {
-		t.Errorf("QEMU: got %q, want %q", got.QEMU, "/data/images/work-backend.qcow2")
+	if got.Hetzner != "snap-12345" {
+		t.Errorf("Hetzner: got %q, want %q", got.Hetzner, "snap-12345")
 	}
 }

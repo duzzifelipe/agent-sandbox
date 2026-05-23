@@ -17,64 +17,6 @@ func writeImagesJSON(t *testing.T, dir string, data map[string]vm.ImageRecord) s
 	return path
 }
 
-func TestImageStore_GetQEMUPath_Found(t *testing.T) {
-	dir := t.TempDir()
-	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"my-profile": {vm.ProviderQEMU: "/data/images/my-profile.qcow2"},
-	})
-
-	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	path, err := store.GetQEMUPath("my-profile")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if path != "/data/images/my-profile.qcow2" {
-		t.Errorf("got %q, want %q", path, "/data/images/my-profile.qcow2")
-	}
-}
-
-func TestImageStore_GetQEMUPath_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	writeImagesJSON(t, dir, map[string]vm.ImageRecord{})
-
-	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	_, err := store.GetQEMUPath("missing")
-	if err == nil {
-		t.Fatal("expected error for missing profile")
-	}
-}
-
-func TestImageStore_GetQEMUPath_EmptyPath(t *testing.T) {
-	dir := t.TempDir()
-	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"no-image": {vm.ProviderQEMU: ""},
-	})
-
-	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	_, err := store.GetQEMUPath("no-image")
-	if err == nil {
-		t.Fatal("expected error for empty qemu path")
-	}
-}
-
-func TestImageStore_SetQEMUPath(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "images.json")
-	store := vm.NewImageStore(path)
-
-	if err := store.SetQEMUPath("my-profile", "/data/images/my-profile.qcow2"); err != nil {
-		t.Fatalf("SetQEMUPath: %v", err)
-	}
-
-	got, err := store.GetQEMUPath("my-profile")
-	if err != nil {
-		t.Fatalf("GetQEMUPath after set: %v", err)
-	}
-	if got != "/data/images/my-profile.qcow2" {
-		t.Errorf("got %q, want %q", got, "/data/images/my-profile.qcow2")
-	}
-}
-
 func TestImageStore_List_Empty(t *testing.T) {
 	dir := t.TempDir()
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
@@ -90,8 +32,8 @@ func TestImageStore_List_Empty(t *testing.T) {
 func TestImageStore_List_ReturnsAll(t *testing.T) {
 	dir := t.TempDir()
 	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"profile-a": {vm.ProviderQEMU: "/data/images/a.qcow2"},
-		"profile-b": {vm.ProviderQEMU: "/data/images/b.qcow2"},
+		"profile-a": {vm.ProviderHetzner: "snap-a"},
+		"profile-b": {vm.ProviderHetzner: "snap-b"},
 	})
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
 	entries, err := store.List()
@@ -103,12 +45,12 @@ func TestImageStore_List_ReturnsAll(t *testing.T) {
 	}
 	seen := make(map[string]string)
 	for _, e := range entries {
-		seen[e.ProfileName] = e.QEMU
+		seen[e.ProfileName] = e.Hetzner
 	}
-	if seen["profile-a"] != "/data/images/a.qcow2" {
+	if seen["profile-a"] != "snap-a" {
 		t.Errorf("profile-a: got %q", seen["profile-a"])
 	}
-	if seen["profile-b"] != "/data/images/b.qcow2" {
+	if seen["profile-b"] != "snap-b" {
 		t.Errorf("profile-b: got %q", seen["profile-b"])
 	}
 }

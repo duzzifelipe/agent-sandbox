@@ -12,7 +12,6 @@ import (
 type Provider string
 
 const (
-	ProviderQEMU    Provider = "qemu"
 	ProviderHetzner Provider = "hetzner"
 )
 
@@ -27,44 +26,6 @@ type ImageStore struct {
 // NewImageStore creates an ImageStore backed by the given file path.
 func NewImageStore(path string) *ImageStore {
 	return &ImageStore{path: path}
-}
-
-// GetQEMUPath returns the qcow2 path for profileName or an error if absent.
-func (s *ImageStore) GetQEMUPath(profileName string) (string, error) {
-	records, err := s.load()
-	if os.IsNotExist(err) {
-		return "", fmt.Errorf("no image built for profile %q: run 'images build' first", profileName)
-	}
-	if err != nil {
-		return "", fmt.Errorf("load images: %w", err)
-	}
-	rec, ok := records[profileName]
-	if !ok {
-		return "", fmt.Errorf("no image record for profile %q", profileName)
-	}
-	p := rec[ProviderQEMU]
-	if p == "" {
-		return "", fmt.Errorf("no qemu image built for profile %q", profileName)
-	}
-	return p, nil
-}
-
-// SetQEMUPath writes or updates the QEMU qcow2 path for profileName.
-func (s *ImageStore) SetQEMUPath(profileName, imagePath string) error {
-	records, err := s.load()
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("load images: %w", err)
-	}
-	if records == nil {
-		records = make(map[string]ImageRecord)
-	}
-	rec := records[profileName]
-	if rec == nil {
-		rec = make(ImageRecord)
-	}
-	rec[ProviderQEMU] = imagePath
-	records[profileName] = rec
-	return s.save(records)
 }
 
 // GetHetznerSnapshotID returns the Hetzner snapshot ID for profileName.
@@ -119,7 +80,6 @@ func (s *ImageStore) List() ([]types.ImageEntry, error) {
 	for profileName, rec := range records {
 		entries = append(entries, types.ImageEntry{
 			ProfileName: profileName,
-			QEMU:        rec[ProviderQEMU],
 			Hetzner:     rec[ProviderHetzner],
 		})
 	}
