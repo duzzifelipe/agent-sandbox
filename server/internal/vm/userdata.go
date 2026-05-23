@@ -5,8 +5,8 @@ import (
 	"fmt"
 )
 
-// BuildUserData returns cloud-init user-data that injects SSH keys, agent env,
-// and a callback to report the VM IP to the server on first boot.
+// BuildUserData returns cloud-init user-data that injects SSH keys and agent env.
+// Session state is tracked by polling the Hetzner API, not by a VM callback.
 func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
 	return fmt.Sprintf(`#cloud-config
@@ -26,8 +26,5 @@ write_files:
       AGENTSDX_SERVER_URL=%s
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
-runcmd:
-  - IP=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
-  - curl -sf -X POST "%s/sessions/%s/ready" -H "Content-Type: application/json" -d "{\"ip_address\":\"$IP\"}" || true
-`, authorizedKey, encodedKey, serverURL, sessionID, profileName, serverURL, sessionID)
+`, authorizedKey, encodedKey, serverURL, sessionID, profileName)
 }
