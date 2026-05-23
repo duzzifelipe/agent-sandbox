@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,6 +49,15 @@ func (f *fakeVM) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 	return v, nil
 }
 
+func fakeImages(t *testing.T, profileName, snapshotID string) *vm.ImageStore {
+	t.Helper()
+	store := vm.NewImageStore(filepath.Join(t.TempDir(), "images.json"))
+	if err := store.SetHetznerSnapshotID(profileName, snapshotID); err != nil {
+		t.Fatalf("seed images: %v", err)
+	}
+	return store
+}
+
 func TestManager_StartSession_CreatesSession(t *testing.T) {
 	store := newStore(t)
 	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
@@ -62,7 +72,7 @@ func TestManager_StartSession_CreatesSession(t *testing.T) {
 		t.Fatalf("StoreVaultData: %v", err)
 	}
 
-	mgr := session.NewManager(store, newFakeVM(), vaultDir, vaultSecret, "")
+	mgr := session.NewManager(store, newFakeVM(), fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
 	id, err := mgr.Start(context.Background(), "dev")
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -71,7 +81,6 @@ func TestManager_StartSession_CreatesSession(t *testing.T) {
 		t.Fatal("expected non-empty session ID")
 	}
 
-	// Give background goroutine time to update state.
 	time.Sleep(100 * time.Millisecond)
 
 	rec, err := store.Get(id)
@@ -98,7 +107,7 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	vault.StoreVaultData(vaultDir, "dev", vaultSecret, vaultData)
 
 	fakeProvider := newFakeVM()
-	mgr := session.NewManager(store, fakeProvider, vaultDir, vaultSecret, "")
+	mgr := session.NewManager(store, fakeProvider, fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
 
 	id, _ := mgr.Start(context.Background(), "dev")
 	time.Sleep(100 * time.Millisecond)
