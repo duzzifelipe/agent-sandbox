@@ -44,7 +44,7 @@ func dialSSHWithRetry(ctx context.Context, addr, privKey string) (sshConn, error
 		lastErr = err
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("timed out connecting to %s: %v", addr, lastErr)
+			return nil, fmt.Errorf("timed out connecting to %s: %w", addr, lastErr)
 		case <-ticker.C:
 		}
 	}
@@ -104,8 +104,11 @@ func uploadDir(conn sshConn, localDir string) error {
 		errCh <- walkErr
 	}()
 
-	if err := session.Run("mkdir -p /tmp/agentsdx-vm && tar -xzf - -C /tmp/agentsdx-vm"); err != nil {
-		return fmt.Errorf("extract dir on remote: %w", err)
+	runErr := session.Run("mkdir -p /tmp/agentsdx-vm && tar -xzf - -C /tmp/agentsdx-vm")
+	if runErr != nil {
+		pr.CloseWithError(runErr) // unblock the goroutine
+		<-errCh                   // wait for it to exit
+		return fmt.Errorf("extract dir on remote: %w", runErr)
 	}
 	return <-errCh
 }

@@ -39,33 +39,29 @@ func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string,
 	if err != nil {
 		return "", fmt.Errorf("create build vm: %w", err)
 	}
+	defer func() { _ = b.provider.DestroyBuildVM(ctx, buildVM.ID) }()
 
 	scripts := composeScripts(profile)
 	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
 	if err != nil {
-		_ = b.provider.DestroyBuildVM(ctx, buildVM.ID)
 		return "", fmt.Errorf("write orchestration script: %w", err)
 	}
 	defer os.Remove(orchScript)
 
 	log.Printf("provisioning profile %s on %s", profile.Name, buildVM.IPAddress)
 	if err := b.provision(ctx, buildVM.IPAddress, privKey, b.vmDir, orchScript); err != nil {
-		_ = b.provider.DestroyBuildVM(ctx, buildVM.ID)
 		return "", fmt.Errorf("provision: %w", err)
 	}
 
 	snapshotID, err := b.provider.SnapshotVM(ctx, buildVM.ID, profile.Name)
 	if err != nil {
-		_ = b.provider.DestroyBuildVM(ctx, buildVM.ID)
 		return "", fmt.Errorf("snapshot vm: %w", err)
 	}
 
 	if err := b.images.SetHetznerSnapshotID(profile.Name, snapshotID); err != nil {
-		_ = b.provider.DestroyBuildVM(ctx, buildVM.ID)
 		return "", fmt.Errorf("store snapshot id: %w", err)
 	}
 
-	_ = b.provider.DestroyBuildVM(ctx, buildVM.ID)
 	log.Printf("build complete for profile %s: snapshot %s", profile.Name, snapshotID)
 	return snapshotID, nil
 }
@@ -112,10 +108,11 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("create temp script: %w", err)
 	}
-	defer f.Close()
 
 	tmpl, err := template.New("orch").Parse(orchestrationTpl)
 	if err != nil {
+		f.Close()
+		os.Remove(f.Name())
 		return "", fmt.Errorf("parse template: %w", err)
 	}
 	data := struct {
@@ -123,10 +120,15 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 		Agent   string
 	}{Scripts: scripts, Agent: agentProvider}
 	if err := tmpl.Execute(f, data); err != nil {
+		f.Close()
+		os.Remove(f.Name())
 		return "", fmt.Errorf("execute template: %w", err)
 	}
-	if err := os.Chmod(f.Name(), 0o755); err != nil {
+	name := f.Name()
+	f.Close()
+	if err := os.Chmod(name, 0o755); err != nil {
+		os.Remove(name)
 		return "", fmt.Errorf("chmod script: %w", err)
 	}
-	return f.Name(), nil
+	return name, nil
 }
