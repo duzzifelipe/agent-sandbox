@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
 
 	"github.com/duck-labs/agentsdx-server/internal/api"
@@ -28,10 +29,12 @@ func newServeCmd() *cobra.Command {
 
 func runServe() {
 	secret := mustEnv("AGENTSDX_VAULT_SECRET")
+	hcloudToken := mustEnv("AGENTSDX_HCLOUD_TOKEN")
 	dataDir := envOrDefault("AGENTSDX_DATA_DIR", "./data")
 	addr := envOrDefault("AGENTSDX_ADDR", ":8080")
 	serverURL := envOrDefault("AGENTSDX_SERVER_URL", "http://localhost"+addr)
 	vmDir := envOrDefault("AGENTSDX_VM_DIR", "./vm")
+	hcloudLocation := envOrDefault("AGENTSDX_HCLOUD_LOCATION", "nbg1")
 
 	for _, dir := range []struct {
 		path string
@@ -39,9 +42,7 @@ func runServe() {
 	}{
 		{filepath.Join(dataDir, "profiles"), 0755},
 		{filepath.Join(dataDir, "vault"), 0700},
-		{filepath.Join(dataDir, "iso"), 0755},
 		{filepath.Join(dataDir, "images"), 0755},
-		{filepath.Join(dataDir, "qemu"), 0755},
 	} {
 		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
 			log.Fatalf("create data dir %s: %v", dir.path, err)
@@ -54,14 +55,14 @@ func runServe() {
 	}
 	defer conn.Close()
 
-	profileStore := profile.NewStore(conn, filepath.Join(dataDir, "profiles"))
+	client := hcloud.NewClient(hcloud.WithToken(hcloudToken))
+	hetznerProvider := vm.NewHetznerProvider(client, hcloudLocation)
+
 	images := vm.NewImageStore(filepath.Join(dataDir, "images.json"))
-	provider := vm.NewQEMUProvider(images, filepath.Join(dataDir, "iso"), filepath.Join(dataDir, "qemu"))
-
+	profileStore := profile.NewStore(conn, filepath.Join(dataDir, "profiles"))
 	sessionStore := session.NewStore(conn)
-	mgr := session.NewManager(sessionStore, provider, filepath.Join(dataDir, "vault"), secret, serverURL)
-
-	imageBuilder := builder.New(vmDir, filepath.Join(dataDir, "images"), filepath.Join(dataDir, "iso"), images)
+	mgr := session.NewManager(sessionStore, hetznerProvider, images, filepath.Join(dataDir, "vault"), secret, serverURL)
+	imageBuilder := builder.New(vmDir, images, hetznerProvider)
 
 	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 
