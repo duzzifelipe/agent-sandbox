@@ -2,7 +2,7 @@
 
 **Ephemeral VMs for AI coding agents.**
 
-agentsdx wraps every Claude Code session in a fresh, isolated VirtualBox VM. Your agent gets a clean environment on every run; your credentials, memory, and git keys are encrypted at rest and synced back automatically when the session ends.
+agentsdx wraps every Claude Code session in a fresh, isolated QEMU VM. Your agent gets a clean environment on every run; your credentials, memory, and git keys are encrypted at rest and synced back automatically when the session ends.
 
 ```
 ┌─ your machine ──────────────────────────────────────────────────────┐
@@ -11,7 +11,7 @@ agentsdx wraps every Claude Code session in a fresh, isolated VirtualBox VM. You
 │       │                                                             │
 │       ▼                                                             │
 │   ┌─ agentsdxd (server) ──────────────────────────────────────┐    │
-│   │  imports OVA → boots VM → injects SSH key + env           │    │
+│   │  snapshots qcow2 → boots QEMU → injects SSH key + env     │    │
 │   │  ┌─ VM (ephemeral) ──────────────────────────────────┐    │    │
 │   │  │  vault restored → repos cloned → claude launched  │    │    │
 │   │  │                                                    │    │    │
@@ -23,15 +23,15 @@ agentsdx wraps every Claude Code session in a fresh, isolated VirtualBox VM. You
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Status:** MVP — single-user, self-hosted, VirtualBox + Claude Code.
+> **Status:** MVP — single-user, self-hosted, QEMU + Claude Code (macOS/Apple Silicon).
 
 ---
 
 ## How it works
 
 1. **Profiles** describe a sandbox: base OS, tooling (mise, docker, gh…), and which agent to run.
-2. **Images** are built once per profile by Packer — Ubuntu + your tooling baked into an OVA.
-3. **Sessions** import the OVA, boot the VM, and inject your encrypted SSH keys and agent state via cloud-init. The VM calls back to the server to restore credentials before handing control to `claude`.
+2. **Images** are built once per profile by Packer — Ubuntu + your tooling baked into a qcow2 image.
+3. **Sessions** create a copy-on-write snapshot of the image, boot the VM via QEMU, and inject your encrypted SSH keys and agent state via cloud-init. The VM calls back to the server to restore credentials before handing control to `claude`.
 4. **Vault sync** runs automatically when you exit — the current `.claude/` state is encrypted and stored server-side so the next session picks up exactly where you left off.
 
 ---
@@ -41,7 +41,7 @@ agentsdx wraps every Claude Code session in a fresh, isolated VirtualBox VM. You
 | Tool | Version | Notes |
 |---|---|---|
 | Go | 1.21+ | [go.dev/dl](https://go.dev/dl) |
-| VirtualBox | 7.x | [virtualbox.org](https://www.virtualbox.org/wiki/Downloads) |
+| QEMU | latest | `brew install qemu` — includes `qemu-system-aarch64`, `qemu-img`, and vmnet-shared support |
 | Packer | 1.11+ | `brew install packer` |
 | Claude Code | latest | `npm install -g @anthropic-ai/claude-code && claude login` |
 
@@ -52,13 +52,16 @@ agentsdx wraps every Claude Code session in a fresh, isolated VirtualBox VM. You
 ### 1. Build
 
 ```bash
-cd server && go build -o ../agentsdxd ./cmd/agentsdxd && cd ..
-cd cli    && go build -o ../agentsdx  ./cmd/agentsdx  && cd ..
+mise build
+
+# or individually
+mise build:server
+mise build:cli
 ```
 
 ### 2. One-time host setup
 
-Creates the `vboxnet0` host-only adapter and downloads the Packer VirtualBox plugin:
+Verifies QEMU is installed and downloads the Packer QEMU plugin:
 
 ```bash
 ./agentsdxd setup
@@ -68,13 +71,13 @@ Creates the `vboxnet0` host-only adapter and downloads the Packer VirtualBox plu
 
 ```bash
 export AGENTSDX_VAULT_SECRET="$(openssl rand -hex 32)"
-export AGENTSDX_SERVER_URL="http://192.168.56.1:8080"
+export AGENTSDX_SERVER_URL="http://192.168.64.1:8080"
 
 ./agentsdxd serve
 ```
 
 `AGENTSDX_VAULT_SECRET` encrypts the vault — store it safely, you cannot recover vault data without it.  
-`AGENTSDX_SERVER_URL` is the address VMs use to call back to the server; `192.168.56.1` is the host IP on the `vboxnet0` interface.
+`AGENTSDX_SERVER_URL` is the address VMs use to call back to the server; `192.168.64.1` is the host gateway on the `vmnet-shared` interface used by QEMU on macOS.
 
 ### 4. Create a profile and build an image
 
@@ -115,7 +118,7 @@ agentsdx sync <profile> <file>          copy a local file into the running VM
 ## Server reference
 
 ```
-agentsdxd setup                         one-time host setup (vboxnet0 + packer init)
+agentsdxd setup                         one-time host setup (verify QEMU + packer init)
 agentsdxd serve                         start the HTTP API server
 ```
 
@@ -137,13 +140,13 @@ agent-sandbox/
 ├── server/         # agentsdxd server (Go)
 ├── shared/         # shared types (Go)
 └── vm/             # Packer template + provisioning scripts (bash)
-    ├── base/           provision.sh — git, curl, ssh, Guest Additions
+    ├── base/           provision.sh — git, curl, ssh
     ├── tooling/        mise / docker / docker-compose / gh
     ├── agents/
     │   ├── claude/     provision.sh + entrypoint.sh
     │   └── _template/  starting point for new agents
     ├── vault-sync.sh   called on session end to sync state back
-    └── virtualbox.pkr.hcl
+    └── qemu.pkr.hcl    Packer template (QEMU, macOS/Apple Silicon)
 ```
 
 ---
