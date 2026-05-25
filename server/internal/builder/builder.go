@@ -12,34 +12,39 @@ import (
 	"github.com/duck-labs/agentsdx-shared/types"
 )
 
-// Builder orchestrates Hetzner image builds.
+// Builder orchestrates image builds across multiple providers.
 type Builder struct {
-	vmDir    string
-	images   *vm.ImageStore
-	provider vm.ImageProvider
+	vmDir     string
+	images    *vm.ImageStore
+	providers map[string]vm.ImageProvider // key: provider name ("hetzner", "local")
 	// provision is injectable for testing; defaults to sshProvision.
-	provision func(ctx context.Context, ip, privKey, vmDir, orchScriptPath string) error
+	provision func(ctx context.Context, addr, privKey, vmDir, orchScriptPath string) error
 }
 
 // New creates a Builder.
-func New(vmDir string, images *vm.ImageStore, provider vm.ImageProvider) *Builder {
-	b := &Builder{vmDir: vmDir, images: images, provider: provider}
+func New(vmDir string, images *vm.ImageStore, providers map[string]vm.ImageProvider) *Builder {
+	b := &Builder{vmDir: vmDir, images: images, providers: providers}
 	b.provision = b.sshProvision
 	return b
 }
 
-// Build provisions a Hetzner snapshot for the given profile and returns the snapshot ID.
+// Build provisions a snapshot for the given profile and returns the snapshot ID.
 func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string, error) {
+	provider, ok := b.providers[profile.Infrastructure.Provider]
+	if !ok {
+		return "", fmt.Errorf("provider %q not configured — check server credentials", profile.Infrastructure.Provider)
+	}
+
 	privKey, pubKey, err := vault.GenerateKeyPair()
 	if err != nil {
 		return "", fmt.Errorf("generate key pair: %w", err)
 	}
 
-	buildVM, err := b.provider.CreateBuildVM(ctx, profile.Infrastructure.Image, pubKey)
+	buildVM, err := provider.CreateBuildVM(ctx, profile.Infrastructure.Image, pubKey)
 	if err != nil {
 		return "", fmt.Errorf("create build vm: %w", err)
 	}
-	defer func() { _ = b.provider.DestroyBuildVM(ctx, buildVM.ID) }()
+	defer func() { _ = provider.DestroyBuildVM(ctx, buildVM.ID) }()
 
 	scripts := composeScripts(profile)
 	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
@@ -48,17 +53,24 @@ func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string,
 	}
 	defer os.Remove(orchScript)
 
-	log.Printf("provisioning profile %s on %s", profile.Name, buildVM.IPAddress)
-	if err := b.provision(ctx, buildVM.IPAddress, privKey, b.vmDir, orchScript); err != nil {
+	var sshAddr string
+	if buildVM.SSHPort != 0 {
+		sshAddr = fmt.Sprintf("127.0.0.1:%d", buildVM.SSHPort)
+	} else {
+		sshAddr = buildVM.IPAddress + ":22"
+	}
+
+	log.Printf("provisioning profile %s on %s", profile.Name, sshAddr)
+	if err := b.provision(ctx, sshAddr, privKey, b.vmDir, orchScript); err != nil {
 		return "", fmt.Errorf("provision: %w", err)
 	}
 
-	snapshotID, err := b.provider.SnapshotVM(ctx, buildVM.ID, profile.Name)
+	snapshotID, err := provider.SnapshotVM(ctx, buildVM.ID, profile.Name)
 	if err != nil {
 		return "", fmt.Errorf("snapshot vm: %w", err)
 	}
 
-	if err := b.images.SetHetznerSnapshotID(profile.Name, snapshotID); err != nil {
+	if err := b.images.SetImageID(vm.Provider(profile.Infrastructure.Provider), profile.Name, snapshotID); err != nil {
 		return "", fmt.Errorf("store snapshot id: %w", err)
 	}
 
@@ -66,8 +78,8 @@ func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string,
 	return snapshotID, nil
 }
 
-func (b *Builder) sshProvision(ctx context.Context, ip, privKey, vmDir, orchScriptPath string) error {
-	conn, err := dialSSHWithRetry(ctx, ip+":22", privKey)
+func (b *Builder) sshProvision(ctx context.Context, addr, privKey, vmDir, orchScriptPath string) error {
+	conn, err := dialSSHWithRetry(ctx, addr, privKey)
 	if err != nil {
 		return fmt.Errorf("dial ssh: %w", err)
 	}

@@ -45,7 +45,8 @@ func testBuilder(t *testing.T, provider *fakeImageProvider) *Builder {
 	t.Helper()
 	vmDir := t.TempDir()
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
-	b := New(vmDir, vm.NewImageStore(imagesPath), provider)
+	providers := map[string]vm.ImageProvider{"hetzner": provider}
+	b := New(vmDir, vm.NewImageStore(imagesPath), providers)
 	b.provision = func(_ context.Context, _, _, _, _ string) error { return nil }
 	return b
 }
@@ -59,7 +60,7 @@ func TestBuild_StoresSnapshotID(t *testing.T) {
 
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
-		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 
@@ -71,9 +72,9 @@ func TestBuild_StoresSnapshotID(t *testing.T) {
 		t.Errorf("returned snapshotID: got %q, want %q", got, "snap-42")
 	}
 
-	stored, err := b.images.GetHetznerSnapshotID("my-profile")
+	stored, err := b.images.GetImageID(vm.ProviderHetzner, "my-profile")
 	if err != nil {
-		t.Fatalf("GetHetznerSnapshotID: %v", err)
+		t.Fatalf("GetImageID: %v", err)
 	}
 	if stored != "snap-42" {
 		t.Errorf("stored snapshotID: got %q, want %q", stored, "snap-42")
@@ -89,7 +90,7 @@ func TestBuild_DestroysBuildVMOnSuccess(t *testing.T) {
 
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
-		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 
@@ -107,7 +108,7 @@ func TestBuild_CreateBuildVMFailure_ReturnsError(t *testing.T) {
 
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
-		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 
@@ -125,14 +126,15 @@ func TestBuild_ProvisionFailure_DestroysBuildVM(t *testing.T) {
 		buildVM: &vm.VM{ID: "build-1", IPAddress: "1.2.3.4", State: vm.VMStateRunning},
 	}
 	imagesPath := filepath.Join(t.TempDir(), "images.json")
-	b := New(t.TempDir(), vm.NewImageStore(imagesPath), provider)
+	providers := map[string]vm.ImageProvider{"hetzner": provider}
+	b := New(t.TempDir(), vm.NewImageStore(imagesPath), providers)
 	b.provision = func(_ context.Context, _, _, _, _ string) error {
 		return errors.New("ssh failed")
 	}
 
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
-		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04"},
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
 		Agent:          types.AgentConfig{Provider: "claude"},
 	}
 
@@ -142,6 +144,57 @@ func TestBuild_ProvisionFailure_DestroysBuildVM(t *testing.T) {
 	}
 	if len(provider.destroyedIDs) != 1 {
 		t.Errorf("expected DestroyBuildVM called once, got: %v", provider.destroyedIDs)
+	}
+}
+
+func TestBuild_ProviderNotConfigured_ReturnsError(t *testing.T) {
+	provider := &fakeImageProvider{
+		buildVM:    &vm.VM{ID: "build-1", IPAddress: "1.2.3.4", State: vm.VMStateRunning},
+		snapshotID: "snap-42",
+	}
+	b := testBuilder(t, provider)
+
+	profile := types.ProfileSpec{
+		Name:           "my-profile",
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "unknown"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+
+	_, err := b.Build(context.Background(), profile)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "not configured") {
+		t.Errorf("expected 'not configured' in error, got: %v", err)
+	}
+}
+
+func TestBuild_SSHAddr_UsesSSHPortWhenSet(t *testing.T) {
+	provider := &fakeImageProvider{
+		buildVM:    &vm.VM{ID: "build-1", IPAddress: "1.2.3.4", SSHPort: 12345, State: vm.VMStateRunning},
+		snapshotID: "snap-42",
+	}
+	imagesPath := filepath.Join(t.TempDir(), "images.json")
+	providers := map[string]vm.ImageProvider{"hetzner": provider}
+	b := New(t.TempDir(), vm.NewImageStore(imagesPath), providers)
+
+	var capturedAddr string
+	b.provision = func(_ context.Context, addr, _, _, _ string) error {
+		capturedAddr = addr
+		return nil
+	}
+
+	profile := types.ProfileSpec{
+		Name:           "my-profile",
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+
+	if _, err := b.Build(context.Background(), profile); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if capturedAddr != "127.0.0.1:12345" {
+		t.Errorf("SSH addr: got %q, want %q", capturedAddr, "127.0.0.1:12345")
 	}
 }
 

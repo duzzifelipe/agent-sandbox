@@ -62,7 +62,7 @@ func runServe() {
 	profileStore := profile.NewStore(conn, filepath.Join(dataDir, "profiles"))
 	sessionStore := session.NewStore(conn)
 	mgr := session.NewManager(sessionStore, hetznerProvider, images, filepath.Join(dataDir, "vault"), secret, serverURL)
-	imageBuilder := builder.New(vmDir, images, hetznerProvider)
+	imageBuilder := builder.New(vmDir, images, map[string]vm.ImageProvider{"hetzner": hetznerProvider})
 
 	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 
