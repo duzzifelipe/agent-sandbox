@@ -198,6 +198,33 @@ func TestBuild_SSHAddr_UsesSSHPortWhenSet(t *testing.T) {
 	}
 }
 
+func TestBuild_SSHAddr_FallsBackToIPWhenNoSSHPort(t *testing.T) {
+	provider := &fakeImageProvider{
+		buildVM:    &vm.VM{ID: "build-1", IPAddress: "10.0.0.1", SSHPort: 0, State: vm.VMStateRunning},
+		snapshotID: "snap-1",
+	}
+	b := testBuilder(t, provider)
+
+	var capturedAddr string
+	b.provision = func(_ context.Context, addr, _, _, _ string) error {
+		capturedAddr = addr
+		return nil
+	}
+
+	profile := types.ProfileSpec{
+		Name:           "my-profile",
+		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "hetzner"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+
+	if _, err := b.Build(context.Background(), profile); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if capturedAddr != "10.0.0.1:22" {
+		t.Errorf("SSH addr: got %q, want %q", capturedAddr, "10.0.0.1:22")
+	}
+}
+
 func TestComposeScripts_BaseOnly(t *testing.T) {
 	profile := types.ProfileSpec{
 		Infrastructure: types.InfrastructureConfig{Tooling: nil},
