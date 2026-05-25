@@ -287,7 +287,10 @@ func (p *LocalProvider) GetVM(ctx context.Context, vmID string) (*VM, error) {
 		`SELECT pid, ssh_port FROM qemu_vms WHERE id = ?`, vmID,
 	).Scan(&pid, &sshPort)
 	if err != nil {
-		return &VM{ID: vmID, State: VMStateUnknown}, nil
+		if err == sql.ErrNoRows {
+			return &VM{ID: vmID, State: VMStateUnknown}, nil
+		}
+		return nil, fmt.Errorf("query qemu_vms: %w", err)
 	}
 
 	state := VMStateUnknown
