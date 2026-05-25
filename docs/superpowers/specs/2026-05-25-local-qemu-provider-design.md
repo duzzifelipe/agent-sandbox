@@ -20,9 +20,9 @@ Add a `local` VM provider that runs Ubuntu VMs on macOS arm64 using raw QEMU com
 
 ### New Components
 
-**`server/internal/vm/local.go`** — `LocalProvider` implementing `VMProvider` and `ImageProvider`.
+**`server/internal/vm/local.go`** — `LocalProvider` implementing `VMProvider` and `ImageProvider`. Constructed with `dataDir = filepath.Join(AGENTSDX_DATA_DIR, "qemu")`, consistent with how other subdirs (`profiles`, `vault`, `images`) are created in `serve.go`.
 
-**`server/internal/db/` qemu_vms table** — persists running QEMU process state across server restarts:
+**`server/internal/db/` qemu_vms table** — migration added inside the existing `db.Open` call alongside current schema setup. — persists running QEMU process state across server restarts:
 
 ```sql
 CREATE TABLE IF NOT EXISTS qemu_vms (
