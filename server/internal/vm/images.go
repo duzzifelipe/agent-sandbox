@@ -13,6 +13,7 @@ type Provider string
 
 const (
 	ProviderHetzner Provider = "hetzner"
+	ProviderLocal   Provider = "local"
 )
 
 // ImageRecord maps a Provider to its built image path for a single profile.
@@ -28,8 +29,8 @@ func NewImageStore(path string) *ImageStore {
 	return &ImageStore{path: path}
 }
 
-// GetHetznerSnapshotID returns the Hetzner snapshot ID for profileName.
-func (s *ImageStore) GetHetznerSnapshotID(profileName string) (string, error) {
+// GetImageID returns the image ID for the given provider and profileName.
+func (s *ImageStore) GetImageID(provider Provider, profileName string) (string, error) {
 	records, err := s.load()
 	if os.IsNotExist(err) {
 		return "", fmt.Errorf("no image built for profile %q: run 'images build' first", profileName)
@@ -41,15 +42,15 @@ func (s *ImageStore) GetHetznerSnapshotID(profileName string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no image record for profile %q", profileName)
 	}
-	id := rec[ProviderHetzner]
+	id := rec[provider]
 	if id == "" {
-		return "", fmt.Errorf("no hetzner snapshot built for profile %q", profileName)
+		return "", fmt.Errorf("no %s image built for profile %q", provider, profileName)
 	}
 	return id, nil
 }
 
-// SetHetznerSnapshotID writes or updates the Hetzner snapshot ID for profileName.
-func (s *ImageStore) SetHetznerSnapshotID(profileName, snapshotID string) error {
+// SetImageID writes or updates the image ID for the given provider and profileName.
+func (s *ImageStore) SetImageID(provider Provider, profileName, id string) error {
 	records, err := s.load()
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("load images: %w", err)
@@ -61,9 +62,19 @@ func (s *ImageStore) SetHetznerSnapshotID(profileName, snapshotID string) error 
 	if rec == nil {
 		rec = make(ImageRecord)
 	}
-	rec[ProviderHetzner] = snapshotID
+	rec[provider] = id
 	records[profileName] = rec
 	return s.save(records)
+}
+
+// GetHetznerSnapshotID returns the Hetzner snapshot ID for profileName.
+func (s *ImageStore) GetHetznerSnapshotID(profileName string) (string, error) {
+	return s.GetImageID(ProviderHetzner, profileName)
+}
+
+// SetHetznerSnapshotID writes or updates the Hetzner snapshot ID for profileName.
+func (s *ImageStore) SetHetznerSnapshotID(profileName, snapshotID string) error {
+	return s.SetImageID(ProviderHetzner, profileName, snapshotID)
 }
 
 // List returns all image entries from images.json.
@@ -81,6 +92,7 @@ func (s *ImageStore) List() ([]types.ImageEntry, error) {
 		entries = append(entries, types.ImageEntry{
 			ProfileName: profileName,
 			Hetzner:     rec[ProviderHetzner],
+			Local:       rec[ProviderLocal],
 		})
 	}
 	return entries, nil

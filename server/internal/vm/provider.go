@@ -30,6 +30,7 @@ type CreateVMRequest struct {
 type VM struct {
 	ID        string
 	IPAddress string
+	SSHPort   int // SSHPort is the forwarded SSH port; 0 means use port 22 (direct access).
 	State     string
 }
 

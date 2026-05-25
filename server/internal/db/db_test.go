@@ -14,7 +14,7 @@ func TestOpen_CreatesAllTables(t *testing.T) {
 	}
 	defer conn.Close()
 
-	for _, table := range []string{"profiles", "sessions", "images"} {
+	for _, table := range []string{"profiles", "sessions", "images", "qemu_vms"} {
 		var count int
 		err := conn.QueryRow(
 			"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table,
@@ -46,7 +46,7 @@ func TestOpen_InMemory(t *testing.T) {
 	}
 	defer conn.Close()
 
-	for _, table := range []string{"profiles", "sessions", "images"} {
+	for _, table := range []string{"profiles", "sessions", "images", "qemu_vms"} {
 		var count int
 		err := conn.QueryRow(
 			"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table,

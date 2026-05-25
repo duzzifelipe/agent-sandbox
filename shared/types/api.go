@@ -30,4 +30,5 @@ type BuildImageRequest struct {
 type ImageEntry struct {
 	ProfileName string `json:"profile_name"`
 	Hetzner     string `json:"hetzner,omitempty"`
+	Local       string `json:"local,omitempty"`
 }

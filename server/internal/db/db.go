@@ -67,5 +67,16 @@ func migrate(conn *sql.DB) error {
 		return fmt.Errorf("create images table: %w", err)
 	}
 
+	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS qemu_vms (
+        id            TEXT PRIMARY KEY,
+        pid           INTEGER NOT NULL,
+        ssh_port      INTEGER NOT NULL,
+        overlay_path  TEXT NOT NULL,
+        seed_iso_path TEXT NOT NULL,
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`); err != nil {
+		return fmt.Errorf("create qemu_vms table: %w", err)
+	}
+
 	return tx.Commit()
 }
