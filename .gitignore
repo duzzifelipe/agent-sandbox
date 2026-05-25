@@ -2,7 +2,7 @@
 dist/
 
 # Git worktrees
-.wortrees/
+.worktrees/
 
 # Go build artifacts
 cli/agentsdx
