@@ -40,12 +40,12 @@ func newHandler(t *testing.T) (*api.Handler, string) {
 	fakeProvider := &fakeVM{}
 	// sessionImages is pre-seeded so Start("dev") can resolve a snapshot ID.
 	sessionImages := vm.NewImageStore(filepath.Join(dir, "session-images.json"))
-	_ = sessionImages.SetHetznerSnapshotID("dev", "snap-1")
+	_ = sessionImages.SetImageID(vm.ProviderHetzner, "dev", "snap-1")
 
 	// handlerImages is the empty store exposed via the /images API.
 	handlerImages := vm.NewImageStore(filepath.Join(dir, "images.json"))
 
-	mgr := session.NewManager(sessionStore, fakeProvider, sessionImages, dir, "test-secret", "")
+	mgr := session.NewManager(sessionStore, map[string]vm.VMProvider{"hetzner": fakeProvider}, sessionImages, dir, "test-secret", "")
 
 	h := api.NewHandler(profileStore, mgr, handlerImages, &fakeBuilder{}, dir, "test-secret")
 	return h, dir
@@ -118,9 +118,19 @@ func TestHandler_GetProfile_NotFound(t *testing.T) {
 func TestHandler_CreateSession(t *testing.T) {
 	h, dir := newHandler(t)
 
-	conn, _ := db.Open(filepath.Join(dir, "test.db"))
-	conn.Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
-	conn.Close()
+	// Create the profile via the API so the YAML file exists.
+	devSpec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+	}
+	profileBody, _ := json.Marshal(devSpec)
+	profileReq := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(profileBody))
+	profileReq.Header.Set("Content-Type", "application/json")
+	profileRec := httptest.NewRecorder()
+	h.Router().ServeHTTP(profileRec, profileReq)
+	if profileRec.Code != http.StatusCreated {
+		t.Fatalf("POST /profiles: got %d — %s", profileRec.Code, profileRec.Body.String())
+	}
 
 	vault.StoreVaultData(dir, "dev", "test-secret", types.VaultData{VMAccessPublicKey: "ssh-rsa AAAA..."})
 

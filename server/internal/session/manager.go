@@ -19,7 +19,7 @@ const (
 // Manager orchestrates session start and stop, delegating VM calls to a VMProvider.
 type Manager struct {
 	store       *Store
-	provider    vm.VMProvider
+	providers   map[string]vm.VMProvider // key: provider name
 	images      *vm.ImageStore
 	vaultDir    string
 	vaultSecret string
@@ -27,10 +27,10 @@ type Manager struct {
 }
 
 // NewManager creates a Manager.
-func NewManager(store *Store, provider vm.VMProvider, images *vm.ImageStore, vaultDir, vaultSecret, serverURL string) *Manager {
+func NewManager(store *Store, providers map[string]vm.VMProvider, images *vm.ImageStore, vaultDir, vaultSecret, serverURL string) *Manager {
 	return &Manager{
 		store:       store,
-		provider:    provider,
+		providers:   providers,
 		images:      images,
 		vaultDir:    vaultDir,
 		vaultSecret: vaultSecret,
@@ -39,7 +39,14 @@ func NewManager(store *Store, provider vm.VMProvider, images *vm.ImageStore, vau
 }
 
 // Start creates a session, launches the VM, and returns the session ID immediately.
-func (m *Manager) Start(ctx context.Context, profileName string) (string, error) {
+func (m *Manager) Start(ctx context.Context, spec types.ProfileSpec) (string, error) {
+	provider, ok := m.providers[spec.Infrastructure.Provider]
+	if !ok {
+		return "", fmt.Errorf("provider %q not configured — check server credentials", spec.Infrastructure.Provider)
+	}
+
+	profileName := spec.Name
+
 	if !vault.VaultExists(m.vaultDir, profileName) {
 		if err := m.initVault(profileName); err != nil {
 			return "", fmt.Errorf("init vault: %w", err)
@@ -51,9 +58,9 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 		return "", fmt.Errorf("load vault: %w", err)
 	}
 
-	snapshotID, err := m.images.GetHetznerSnapshotID(profileName)
+	imageID, err := m.images.GetImageID(vm.Provider(spec.Infrastructure.Provider), profileName)
 	if err != nil {
-		return "", fmt.Errorf("get snapshot id: %w", err)
+		return "", fmt.Errorf("get image id: %w", err)
 	}
 
 	id, err := m.store.Create(profileName)
@@ -63,7 +70,7 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 
 	createReq := vm.CreateVMRequest{
 		ProfileName:   profileName,
-		ImageID:       snapshotID,
+		ImageID:       imageID,
 		AuthorizedKey: vaultData.VMAccessPublicKey,
 		UserData: vm.BuildUserData(
 			vaultData.VMAccessPublicKey,
@@ -74,7 +81,7 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 		),
 	}
 
-	v, err := m.provider.CreateVM(ctx, createReq)
+	v, err := provider.CreateVM(ctx, createReq)
 	if err != nil {
 		_ = m.store.UpdateState(id, types.SessionStateDestroyed, "")
 		return "", fmt.Errorf("create vm: %w", err)
@@ -82,7 +89,7 @@ func (m *Manager) Start(ctx context.Context, profileName string) (string, error)
 
 	_ = m.store.UpdateVMID(id, v.ID)
 	_ = m.store.UpdateState(id, types.SessionStateStarting, "")
-	go m.pollUntilRunning(id, v.ID)
+	go m.pollUntilRunning(id, v.ID, provider)
 	return id, nil
 }
 
@@ -94,8 +101,10 @@ func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 	}
 	_ = m.store.UpdateState(sessionID, types.SessionStateStopping, rec.IPAddress)
 	if rec.VMID != "" {
-		if err := m.provider.DestroyVM(ctx, rec.VMID); err != nil {
-			log.Printf("session %s: DestroyVM error: %v", sessionID, err)
+		for _, provider := range m.providers {
+			if err := provider.DestroyVM(ctx, rec.VMID); err == nil {
+				break
+			}
 		}
 	}
 	_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
@@ -133,7 +142,7 @@ func (m *Manager) initVault(profileName string) error {
 	return vault.StoreVaultData(m.vaultDir, profileName, m.vaultSecret, vd)
 }
 
-func (m *Manager) pollUntilRunning(sessionID, vmID string) {
+func (m *Manager) pollUntilRunning(sessionID, vmID string, provider vm.VMProvider) {
 	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 	defer cancel()
 
@@ -141,7 +150,7 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 	defer ticker.Stop()
 
 	for {
-		v, err := m.provider.GetVM(ctx, vmID)
+		v, err := provider.GetVM(ctx, vmID)
 		if err == nil && v.State == vm.VMStateRunning && v.IPAddress != "" {
 			_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress)
 			return
@@ -154,7 +163,7 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string) {
 		case <-ctx.Done():
 			log.Printf("session %s: timed out waiting for VM to start", sessionID)
 			_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
-			_ = m.provider.DestroyVM(context.Background(), vmID)
+			_ = provider.DestroyVM(context.Background(), vmID)
 			return
 		case <-ticker.C:
 		}

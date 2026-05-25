@@ -52,7 +52,7 @@ func (f *fakeVM) GetVM(_ context.Context, vmID string) (*vm.VM, error) {
 func fakeImages(t *testing.T, profileName, snapshotID string) *vm.ImageStore {
 	t.Helper()
 	store := vm.NewImageStore(filepath.Join(t.TempDir(), "images.json"))
-	if err := store.SetHetznerSnapshotID(profileName, snapshotID); err != nil {
+	if err := store.SetImageID(vm.ProviderHetzner, profileName, snapshotID); err != nil {
 		t.Fatalf("seed images: %v", err)
 	}
 	return store
@@ -72,8 +72,12 @@ func TestManager_StartSession_CreatesSession(t *testing.T) {
 		t.Fatalf("StoreVaultData: %v", err)
 	}
 
-	mgr := session.NewManager(store, newFakeVM(), fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
-	id, err := mgr.Start(context.Background(), "dev")
+	mgr := session.NewManager(store, map[string]vm.VMProvider{"hetzner": newFakeVM()}, fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner"},
+	}
+	id, err := mgr.Start(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -107,9 +111,13 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	vault.StoreVaultData(vaultDir, "dev", vaultSecret, vaultData)
 
 	fakeProvider := newFakeVM()
-	mgr := session.NewManager(store, fakeProvider, fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
+	mgr := session.NewManager(store, map[string]vm.VMProvider{"hetzner": fakeProvider}, fakeImages(t, "dev", "snap-1"), vaultDir, vaultSecret, "")
 
-	id, _ := mgr.Start(context.Background(), "dev")
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner"},
+	}
+	id, _ := mgr.Start(context.Background(), spec)
 	time.Sleep(100 * time.Millisecond)
 
 	if err := mgr.Stop(context.Background(), id); err != nil {
@@ -122,5 +130,21 @@ func TestManager_StopSession_DestroysVM(t *testing.T) {
 	}
 	if len(fakeProvider.vms) != 0 {
 		t.Errorf("expected DestroyVM to be called: fakeProvider.vms has %d entries, want 0", len(fakeProvider.vms))
+	}
+}
+
+func TestManager_ProviderNotConfigured_ReturnsError(t *testing.T) {
+	store := newStore(t)
+	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "dev")
+
+	mgr := session.NewManager(store, map[string]vm.VMProvider{}, fakeImages(t, "dev", "snap-1"), t.TempDir(), "test-secret", "")
+
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner"},
+	}
+	_, err := mgr.Start(context.Background(), spec)
+	if err == nil {
+		t.Fatal("expected error for unconfigured provider, got nil")
 	}
 }

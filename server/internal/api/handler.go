@@ -183,7 +183,12 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	id, err := h.sessions.Start(r.Context(), req.ProfileName)
+	spec, err := h.profiles.Get(req.ProfileName)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "profile not found")
+		return
+	}
+	id, err := h.sessions.Start(r.Context(), spec)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
