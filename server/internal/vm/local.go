@@ -30,7 +30,8 @@ var knownImages = map[string]string{
 // cmdExecutor is an injectable interface for running external commands.
 type cmdExecutor interface {
 	RunCmd(ctx context.Context, name string, args ...string) error
-	StartDetached(name string, args ...string) error
+	// StartDetached starts name in the background, redirecting its output to logPath.
+	StartDetached(logPath, name string, args ...string) error
 }
 
 // realCmdExecutor implements cmdExecutor using os/exec.
@@ -43,11 +44,21 @@ func (r *realCmdExecutor) RunCmd(ctx context.Context, name string, args ...strin
 	return cmd.Run()
 }
 
-func (r *realCmdExecutor) StartDetached(name string, args ...string) error {
+func (r *realCmdExecutor) StartDetached(logPath, name string, args ...string) error {
+	f, err := os.Create(logPath)
+	if err != nil {
+		return fmt.Errorf("open qemu log: %w", err)
+	}
 	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Start()
+	cmd.Stdout = f
+	cmd.Stderr = f
+	if err := cmd.Start(); err != nil {
+		f.Close()
+		return err
+	}
+	// Close our copy of the fd; the child process keeps its own.
+	f.Close()
+	return nil
 }
 
 // LocalProvider implements VMProvider and ImageProvider using local QEMU VMs.
@@ -126,6 +137,7 @@ func (p *LocalProvider) CreateBuildVM(ctx context.Context, baseImage, authorized
 	// Launch QEMU
 	pidFile := filepath.Join(tmpDir, "qemu.pid")
 	if err := p.exec.StartDetached(
+		filepath.Join(tmpDir, "qemu.log"),
 		"qemu-system-aarch64",
 		"-nographic",
 		"-machine", "virt",
@@ -264,6 +276,7 @@ func (p *LocalProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM,
 
 	pidFile := filepath.Join(tmpDir, "qemu.pid")
 	if err := p.exec.StartDetached(
+		filepath.Join(tmpDir, "qemu.log"),
 		"qemu-system-aarch64",
 		"-nographic",
 		"-machine", "virt",

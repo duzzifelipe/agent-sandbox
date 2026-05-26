@@ -24,7 +24,7 @@ func (f *fakeCmdExecutor) RunCmd(_ context.Context, name string, args ...string)
 	return f.runErr
 }
 
-func (f *fakeCmdExecutor) StartDetached(name string, args ...string) error {
+func (f *fakeCmdExecutor) StartDetached(logPath, name string, args ...string) error {
 	call := append([]string{name}, args...)
 	f.startCalls = append(f.startCalls, call)
 	return f.startErr
