@@ -3,6 +3,8 @@ package vm
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/duck-labs/agentsdx-server/internal/db"
@@ -96,6 +98,64 @@ func TestLocalProvider_GetVM_ProcessDead_ReturnsUnknown(t *testing.T) {
 	}
 	if vm.State != VMStateUnknown {
 		t.Errorf("GetVM().State = %q, want %q", vm.State, VMStateUnknown)
+	}
+}
+
+func TestLocalProvider_ResolveBaseImage_AbsolutePath_Exists(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "base-*.img")
+	if err != nil {
+		t.Fatalf("create temp img: %v", err)
+	}
+	f.Close()
+
+	p := &LocalProvider{dataDir: t.TempDir(), exec: &fakeCmdExecutor{}}
+	got, err := p.resolveBaseImage(context.Background(), f.Name())
+	if err != nil {
+		t.Fatalf("resolveBaseImage() error: %v", err)
+	}
+	if got != f.Name() {
+		t.Errorf("got %q, want %q", got, f.Name())
+	}
+}
+
+func TestLocalProvider_ResolveBaseImage_AbsolutePath_Missing_ReturnsError(t *testing.T) {
+	p := &LocalProvider{dataDir: t.TempDir(), exec: &fakeCmdExecutor{}}
+	_, err := p.resolveBaseImage(context.Background(), "/nonexistent/path/image.img")
+	if err == nil {
+		t.Fatal("expected error for missing absolute path, got nil")
+	}
+}
+
+func TestLocalProvider_ResolveBaseImage_KnownName_HitsCache(t *testing.T) {
+	dataDir := t.TempDir()
+	cacheDir := filepath.Join(dataDir, "cache")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatalf("mkdir cache: %v", err)
+	}
+	// Pre-populate cache
+	cachedPath := filepath.Join(cacheDir, "ubuntu-24.04.img")
+	if err := os.WriteFile(cachedPath, []byte("fake image"), 0644); err != nil {
+		t.Fatalf("write cache file: %v", err)
+	}
+
+	p := &LocalProvider{dataDir: dataDir, exec: &fakeCmdExecutor{}}
+	got, err := p.resolveBaseImage(context.Background(), "ubuntu-24.04")
+	if err != nil {
+		t.Fatalf("resolveBaseImage() error: %v", err)
+	}
+	if got != cachedPath {
+		t.Errorf("got %q, want %q", got, cachedPath)
+	}
+}
+
+func TestLocalProvider_ResolveBaseImage_UnknownName_ReturnsError(t *testing.T) {
+	p := &LocalProvider{dataDir: t.TempDir(), exec: &fakeCmdExecutor{}}
+	_, err := p.resolveBaseImage(context.Background(), "debian-12")
+	if err == nil {
+		t.Fatal("expected error for unknown name, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown image") {
+		t.Errorf("error %q should mention 'unknown image'", err.Error())
 	}
 }
 

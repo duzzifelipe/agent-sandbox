@@ -44,6 +44,7 @@ func runServe() {
 		{filepath.Join(dataDir, "vault"), 0700},
 		{filepath.Join(dataDir, "images"), 0755},
 		{filepath.Join(dataDir, "qemu"), 0755},
+		{filepath.Join(dataDir, "qemu", "cache"), 0755},
 		{filepath.Join(dataDir, "qemu", "snapshots"), 0755},
 		{filepath.Join(dataDir, "qemu", "sessions"), 0755},
 	} {

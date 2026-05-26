@@ -4,16 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// knownImages maps short image names to Ubuntu arm64 cloud image download URLs.
+var knownImages = map[string]string{
+	"ubuntu-24.04": "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img",
+	"ubuntu-22.04": "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-arm64.img",
+	"ubuntu-20.04": "https://cloud-images.ubuntu.com/releases/20.04/release/focal-server-cloudimg-arm64.img",
+}
 
 // cmdExecutor is an injectable interface for running external commands.
 type cmdExecutor interface {
@@ -81,9 +93,16 @@ func (p *LocalProvider) CreateBuildVM(ctx context.Context, baseImage, authorized
 		return nil, fmt.Errorf("create seed iso: %w", err)
 	}
 
+	// Resolve base image (download if needed)
+	resolvedImage, err := p.resolveBaseImage(ctx, baseImage)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("resolve base image: %w", err)
+	}
+
 	// Create overlay
 	overlayPath := filepath.Join(tmpDir, "build-overlay.qcow2")
-	if err := p.exec.RunCmd(ctx, "qemu-img", "create", "-f", "qcow2", "-b", baseImage, "-F", "qcow2", overlayPath); err != nil {
+	if err := p.exec.RunCmd(ctx, "qemu-img", "create", "-f", "qcow2", "-b", resolvedImage, "-F", "qcow2", overlayPath); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create overlay: %w", err)
 	}
@@ -330,6 +349,81 @@ func (p *LocalProvider) destroyQemuVM(ctx context.Context, vmID string) error {
 
 	_, err = p.db.ExecContext(ctx, `DELETE FROM qemu_vms WHERE id = ?`, vmID)
 	return err
+}
+
+// resolveBaseImage returns the local filesystem path for baseImage.
+// If baseImage is an absolute path that exists, it is used directly.
+// If it is a known name (e.g. "ubuntu-24.04"), the image is downloaded once
+// and cached in <dataDir>/cache/.
+func (p *LocalProvider) resolveBaseImage(ctx context.Context, baseImage string) (string, error) {
+	if filepath.IsAbs(baseImage) {
+		if _, err := os.Stat(baseImage); err != nil {
+			return "", fmt.Errorf("image file not found: %s", baseImage)
+		}
+		return baseImage, nil
+	}
+
+	url, ok := knownImages[baseImage]
+	if !ok {
+		names := make([]string, 0, len(knownImages))
+		for k := range knownImages {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		return "", fmt.Errorf("unknown image %q — use an absolute path or one of: %s", baseImage, strings.Join(names, ", "))
+	}
+
+	cacheDir := filepath.Join(p.dataDir, "cache")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return "", fmt.Errorf("create cache dir: %w", err)
+	}
+	cachePath := filepath.Join(cacheDir, baseImage+".img")
+	if _, err := os.Stat(cachePath); err == nil {
+		log.Printf("local provider: using cached image %s", cachePath)
+		return cachePath, nil
+	}
+
+	log.Printf("local provider: downloading %s from %s (this may take a few minutes)", baseImage, url)
+	if err := downloadToFile(ctx, url, cachePath); err != nil {
+		return "", fmt.Errorf("download %s: %w", baseImage, err)
+	}
+	log.Printf("local provider: image %s cached at %s", baseImage, cachePath)
+	return cachePath, nil
+}
+
+// downloadToFile downloads url into destPath atomically via a temp file.
+func downloadToFile(ctx context.Context, url, destPath string) error {
+	tmpPath := destPath + ".tmp"
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		f.Close()
+		return fmt.Errorf("unexpected HTTP status %d from %s", resp.StatusCode, url)
+	}
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		return fmt.Errorf("write image: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, destPath)
 }
 
 // findFreePort probes ports in 10000–20000 and returns the first available one.
