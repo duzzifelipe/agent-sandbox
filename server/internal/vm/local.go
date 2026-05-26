@@ -117,11 +117,15 @@ func (p *LocalProvider) CreateBuildVM(ctx context.Context, baseImage, authorized
 		return nil, fmt.Errorf("resolve base image: %w", err)
 	}
 
-	// Create overlay
+	// Create overlay and grow it to 20 GB (base image is only ~2 GB; cloud-init growpart expands the partition automatically)
 	overlayPath := filepath.Join(tmpDir, "build-overlay.qcow2")
 	if err := p.exec.RunCmd(ctx, "qemu-img", "create", "-f", "qcow2", "-b", resolvedImage, "-F", "qcow2", overlayPath); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create overlay: %w", err)
+	}
+	if err := p.exec.RunCmd(ctx, "qemu-img", "resize", overlayPath, "20G"); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("resize overlay: %w", err)
 	}
 
 	// Pick free port
