@@ -58,8 +58,14 @@ type LocalProvider struct {
 }
 
 // NewLocalProvider creates a LocalProvider backed by the given DB and data directory.
+// dataDir is converted to an absolute path so qemu-img backing file references
+// resolve correctly regardless of the process working directory.
 func NewLocalProvider(db *sql.DB, dataDir string) *LocalProvider {
-	return &LocalProvider{db: db, dataDir: dataDir, exec: &realCmdExecutor{}}
+	abs, err := filepath.Abs(dataDir)
+	if err != nil {
+		abs = dataDir
+	}
+	return &LocalProvider{db: db, dataDir: abs, exec: &realCmdExecutor{}}
 }
 
 // --- ImageProvider methods ---
