@@ -17,6 +17,7 @@ type SessionResponse struct {
 	Profile   string `json:"profile"`
 	State     string `json:"state"`
 	IPAddress string `json:"ip_address,omitempty"`
+	SSHPort   int    `json:"ssh_port,omitempty"`
 }
 
 type VMKeyResponse struct {

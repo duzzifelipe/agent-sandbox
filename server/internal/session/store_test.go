@@ -48,7 +48,7 @@ func TestStore_UpdateState(t *testing.T) {
 	store.DB().Exec("INSERT INTO profiles (name) VALUES (?)", "p1")
 
 	id, _ := store.Create("p1")
-	if err := store.UpdateState(id, types.SessionStateRunning, "192.168.56.10"); err != nil {
+	if err := store.UpdateState(id, types.SessionStateRunning, "192.168.56.10", 12345); err != nil {
 		t.Fatalf("UpdateState: %v", err)
 	}
 
@@ -58,6 +58,9 @@ func TestStore_UpdateState(t *testing.T) {
 	}
 	if s.IPAddress != "192.168.56.10" {
 		t.Errorf("IPAddress: got %q, want %q", s.IPAddress, "192.168.56.10")
+	}
+	if s.SSHPort != 12345 {
+		t.Errorf("SSHPort: got %d, want 12345", s.SSHPort)
 	}
 }
 

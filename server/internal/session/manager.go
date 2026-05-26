@@ -83,12 +83,12 @@ func (m *Manager) Start(ctx context.Context, spec types.ProfileSpec) (string, er
 
 	v, err := provider.CreateVM(ctx, createReq)
 	if err != nil {
-		_ = m.store.UpdateState(id, types.SessionStateDestroyed, "")
+		_ = m.store.UpdateState(id, types.SessionStateDestroyed, "", 0)
 		return "", fmt.Errorf("create vm: %w", err)
 	}
 
 	_ = m.store.UpdateVMID(id, v.ID)
-	_ = m.store.UpdateState(id, types.SessionStateStarting, "")
+	_ = m.store.UpdateState(id, types.SessionStateStarting, "", 0)
 	go m.pollUntilRunning(id, v.ID, provider)
 	return id, nil
 }
@@ -99,7 +99,7 @@ func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
 	}
-	_ = m.store.UpdateState(sessionID, types.SessionStateStopping, rec.IPAddress)
+	_ = m.store.UpdateState(sessionID, types.SessionStateStopping, rec.IPAddress, rec.SSHPort)
 	if rec.VMID != "" {
 		for _, provider := range m.providers {
 			if err := provider.DestroyVM(ctx, rec.VMID); err == nil {
@@ -107,7 +107,7 @@ func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 			}
 		}
 	}
-	_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
+	_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "", 0)
 	return nil
 }
 
@@ -122,6 +122,7 @@ func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 		Profile:   rec.Profile,
 		State:     rec.State,
 		IPAddress: rec.IPAddress,
+		SSHPort:   rec.SSHPort,
 	}, nil
 }
 
@@ -152,7 +153,7 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string, provider vm.VMProvide
 	for {
 		v, err := provider.GetVM(ctx, vmID)
 		if err == nil && v.State == vm.VMStateRunning && v.IPAddress != "" {
-			_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress)
+			_ = m.store.UpdateState(sessionID, types.SessionStateRunning, v.IPAddress, v.SSHPort)
 			return
 		}
 		if err != nil {
@@ -162,7 +163,7 @@ func (m *Manager) pollUntilRunning(sessionID, vmID string, provider vm.VMProvide
 		select {
 		case <-ctx.Done():
 			log.Printf("session %s: timed out waiting for VM to start", sessionID)
-			_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "")
+			_ = m.store.UpdateState(sessionID, types.SessionStateDestroyed, "", 0)
 			_ = provider.DestroyVM(context.Background(), vmID)
 			return
 		case <-ticker.C:

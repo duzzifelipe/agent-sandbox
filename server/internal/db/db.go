@@ -50,6 +50,7 @@ func migrate(conn *sql.DB) error {
         profile_name TEXT NOT NULL,
         state TEXT NOT NULL,
         ip_address TEXT,
+        ssh_port INTEGER NOT NULL DEFAULT 0,
         vm_id TEXT NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -57,6 +58,8 @@ func migrate(conn *sql.DB) error {
     )`); err != nil {
 		return fmt.Errorf("create sessions table: %w", err)
 	}
+	// Add ssh_port to existing databases that predate this column (safe no-op on new DBs).
+	_, _ = tx.Exec(`ALTER TABLE sessions ADD COLUMN ssh_port INTEGER NOT NULL DEFAULT 0`)
 
 	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS images (
         profile_name TEXT PRIMARY KEY,

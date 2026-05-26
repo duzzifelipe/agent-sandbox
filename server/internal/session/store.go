@@ -28,6 +28,7 @@ type SessionRecord struct {
 	Profile   string
 	State     string
 	IPAddress string
+	SSHPort   int
 	VMID      string
 }
 
@@ -48,8 +49,8 @@ func (s *Store) Create(profileName string) (string, error) {
 func (s *Store) Get(id string) (SessionRecord, error) {
 	var rec SessionRecord
 	err := s.db.QueryRow(
-		`SELECT id, profile_name, state, COALESCE(ip_address, ''), COALESCE(vm_id, '') FROM sessions WHERE id = ?`, id,
-	).Scan(&rec.ID, &rec.Profile, &rec.State, &rec.IPAddress, &rec.VMID)
+		`SELECT id, profile_name, state, COALESCE(ip_address, ''), ssh_port, COALESCE(vm_id, '') FROM sessions WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.Profile, &rec.State, &rec.IPAddress, &rec.SSHPort, &rec.VMID)
 	if err == sql.ErrNoRows {
 		return rec, fmt.Errorf("session %q not found", id)
 	}
@@ -75,11 +76,11 @@ func (s *Store) UpdateVMID(id, vmID string) error {
 	return nil
 }
 
-// UpdateState sets the state and ip_address of a session.
-func (s *Store) UpdateState(id, state, ipAddress string) error {
+// UpdateState sets the state, ip_address, and ssh_port of a session.
+func (s *Store) UpdateState(id, state, ipAddress string, sshPort int) error {
 	res, err := s.db.Exec(
-		`UPDATE sessions SET state = ?, ip_address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		state, ipAddress, id,
+		`UPDATE sessions SET state = ?, ip_address = ?, ssh_port = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		state, ipAddress, sshPort, id,
 	)
 	if err != nil {
 		return fmt.Errorf("update session state: %w", err)

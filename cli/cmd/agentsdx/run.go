@@ -70,9 +70,14 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 				"-o", "StrictHostKeyChecking=no",
 				"-o", "UserKnownHostsFile=/dev/null",
 				"-t",
+			}
+			if session.SSHPort != 0 {
+				sshArgs = append(sshArgs, "-p", fmt.Sprintf("%d", session.SSHPort))
+			}
+			sshArgs = append(sshArgs,
 				fmt.Sprintf("root@%s", session.IPAddress),
 				"/usr/local/bin/entrypoint.sh",
-			}
+			)
 
 			fmt.Printf("Connecting: %s\n", sshArgs[len(sshArgs)-1])
 			return syscall.Exec(sshBin, sshArgs, os.Environ())
