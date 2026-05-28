@@ -59,6 +59,10 @@ func runServe() {
 	}
 	defer conn.Close()
 
+	if err := db.MigrateYAMLProfiles(conn, filepath.Join(dataDir, "profiles")); err != nil {
+		log.Printf("WARN: YAML profile migration: %v", err)
+	}
+
 	localProvider := vm.NewLocalProvider(conn, filepath.Join(dataDir, "qemu"))
 
 	vmProviders := map[string]vm.VMProvider{"local": localProvider}

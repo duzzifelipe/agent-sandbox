@@ -3,9 +3,15 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/duck-labs/agentsdx-shared/types"
 	_ "modernc.org/sqlite"
+	"gopkg.in/yaml.v3"
 )
 
 func Open(path string) (*sql.DB, error) {
@@ -85,4 +91,48 @@ func migrate(conn *sql.DB) error {
 	}
 
 	return tx.Commit()
+}
+
+// MigrateYAMLProfiles scans profilesDir for *.yaml files and inserts any profile
+// whose name is not already present in the DB with a non-empty spec.
+// YAML files are left on disk untouched after migration.
+func MigrateYAMLProfiles(conn *sql.DB, profilesDir string) error {
+	entries, err := os.ReadDir(profilesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read profiles dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(profilesDir, e.Name()))
+		if err != nil {
+			return fmt.Errorf("read %s: %w", e.Name(), err)
+		}
+		var spec types.ProfileSpec
+		if err := yaml.Unmarshal(data, &spec); err != nil {
+			return fmt.Errorf("unmarshal %s: %w", e.Name(), err)
+		}
+		var existing string
+		_ = conn.QueryRow(`SELECT spec FROM profiles WHERE name = ?`, spec.Name).Scan(&existing)
+		if existing != "" {
+			continue
+		}
+		specJSON, err := json.Marshal(spec)
+		if err != nil {
+			return fmt.Errorf("marshal %s: %w", e.Name(), err)
+		}
+		_, err = conn.Exec(
+			`INSERT INTO profiles (name, spec) VALUES (?, ?)
+			 ON CONFLICT(name) DO UPDATE SET spec = excluded.spec`,
+			spec.Name, string(specJSON),
+		)
+		if err != nil {
+			return fmt.Errorf("insert migrated profile %s: %w", spec.Name, err)
+		}
+	}
+	return nil
 }
