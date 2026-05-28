@@ -33,6 +33,7 @@ func main() {
 		newCredentialsCmd(c),
 		newSyncCmd(c, s),
 		newImagesCmd(c),
+		newSecretsCmd(c),
 	)
 
 	if err := root.Execute(); err != nil {
