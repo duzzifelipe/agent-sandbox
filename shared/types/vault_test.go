@@ -52,3 +52,23 @@ func TestVaultData_DefaultAgentStatePaths(t *testing.T) {
 		t.Errorf("second path: got %q, want %q", v.AgentStatePaths[1], ".claude.json")
 	}
 }
+
+func TestVaultData_SecretsField(t *testing.T) {
+	vd := types.VaultData{
+		Secrets: map[string]string{"GITHUB_PAT": "ghp_abc", "OPENAI_API_KEY": "sk-xyz"},
+	}
+	data, err := json.Marshal(vd)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got types.VaultData
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Secrets["GITHUB_PAT"] != "ghp_abc" {
+		t.Errorf("GITHUB_PAT: got %q, want %q", got.Secrets["GITHUB_PAT"], "ghp_abc")
+	}
+	if got.Secrets["OPENAI_API_KEY"] != "sk-xyz" {
+		t.Errorf("OPENAI_API_KEY: got %q, want %q", got.Secrets["OPENAI_API_KEY"], "sk-xyz")
+	}
+}

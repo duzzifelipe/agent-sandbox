@@ -123,3 +123,50 @@ func (c *Client) BuildImage(profileName string) error {
 	}
 	return nil
 }
+
+func (c *Client) SetSecret(profile, key, value string) error {
+	body, _ := json.Marshal(map[string]string{"value": value})
+	req, err := http.NewRequest(http.MethodPut, c.base+"/profiles/"+profile+"/secrets/"+key, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) DeleteSecret(profile, key string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.base+"/profiles/"+profile+"/secrets/"+key, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) ListSecrets(profile string) ([]string, error) {
+	resp, err := c.http.Get(c.base + "/profiles/" + profile + "/secrets")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	var keys []string
+	return keys, json.NewDecoder(resp.Body).Decode(&keys)
+}

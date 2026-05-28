@@ -150,11 +150,7 @@ func TestHandler_CreateSession(t *testing.T) {
 }
 
 func TestBuildImage_Accepted(t *testing.T) {
-	h, dir := newHandler(t)
-
-	conn, _ := db.Open(filepath.Join(dir, "test.db"))
-	conn.Exec("INSERT INTO profiles (name, spec) VALUES (?, ?)", "dev", `{"name":"dev","infrastructure":{"provider":"hetzner","image":"ubuntu-24.04"}}`)
-	conn.Close()
+	h, _ := newHandler(t)
 
 	// Create the profile in the profile store via the API.
 	spec := types.ProfileSpec{
@@ -289,5 +285,124 @@ func TestGetAgentState_ReturnsVaultData(t *testing.T) {
 	}
 	if !bytes.Equal(rec.Body.Bytes(), agentStateBytes) {
 		t.Errorf("expected %q, got %q", agentStateBytes, rec.Body.Bytes())
+	}
+}
+
+func TestHandler_SetSecret_CreatesAndUpdates(t *testing.T) {
+	h, dir := newHandler(t)
+	router := h.Router()
+
+	// Create a profile first.
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /profiles: %d — %s", rec.Code, rec.Body)
+	}
+
+	// Set a secret.
+	body, _ = json.Marshal(map[string]string{"value": "ghp_abc123"})
+	req = httptest.NewRequest(http.MethodPut, "/profiles/dev/secrets/GITHUB_PAT", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("PUT /profiles/dev/secrets/GITHUB_PAT: got %d — %s", rec.Code, rec.Body)
+	}
+
+	// List secrets — should return key name only.
+	req = httptest.NewRequest(http.MethodGet, "/profiles/dev/secrets", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /profiles/dev/secrets: got %d — %s", rec.Code, rec.Body)
+	}
+	var keys []string
+	json.NewDecoder(rec.Body).Decode(&keys)
+	if len(keys) != 1 || keys[0] != "GITHUB_PAT" {
+		t.Errorf("expected [GITHUB_PAT], got %v", keys)
+	}
+
+	// Verify the secret is encrypted in the vault.
+	vd, err := vault.LoadVaultData(dir, "dev", "test-secret")
+	if err != nil {
+		t.Fatalf("load vault: %v", err)
+	}
+	if vd.Secrets["GITHUB_PAT"] != "ghp_abc123" {
+		t.Errorf("vault GITHUB_PAT: got %q, want %q", vd.Secrets["GITHUB_PAT"], "ghp_abc123")
+	}
+}
+
+func TestHandler_DeleteSecret(t *testing.T) {
+	h, dir := newHandler(t)
+	router := h.Router()
+
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	body, _ = json.Marshal(map[string]string{"value": "sk-abc"})
+	req = httptest.NewRequest(http.MethodPut, "/profiles/dev/secrets/OPENAI_KEY", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// Delete it.
+	req = httptest.NewRequest(http.MethodDelete, "/profiles/dev/secrets/OPENAI_KEY", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE: got %d — %s", rec.Code, rec.Body)
+	}
+
+	// Verify removed from vault.
+	vd, err := vault.LoadVaultData(dir, "dev", "test-secret")
+	if err != nil {
+		t.Fatalf("load vault: %v", err)
+	}
+	if _, exists := vd.Secrets["OPENAI_KEY"]; exists {
+		t.Error("expected OPENAI_KEY to be removed from vault")
+	}
+}
+
+func TestHandler_ListSecrets_EmptyWhenNoVault(t *testing.T) {
+	h, _ := newHandler(t)
+	router := h.Router()
+
+	spec := types.ProfileSpec{
+		Name:           "new-profile",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	req := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	req = httptest.NewRequest(http.MethodGet, "/profiles/new-profile/secrets", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /profiles/new-profile/secrets: got %d", rec.Code)
+	}
+	var keys []string
+	json.NewDecoder(rec.Body).Decode(&keys)
+	if len(keys) != 0 {
+		t.Errorf("expected empty list, got %v", keys)
 	}
 }

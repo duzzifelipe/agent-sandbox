@@ -29,6 +29,7 @@ func main() {
 		newProfilesCmd(c),
 		newSessionCmd(c, s),
 		newCredentialsCmd(c),
+		newSecretsCmd(c),
 	)
 
 	if err := root.Execute(); err != nil {
