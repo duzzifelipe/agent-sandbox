@@ -78,6 +78,7 @@ func (m *Manager) Start(ctx context.Context, spec types.ProfileSpec) (string, er
 			id,
 			m.serverURL,
 			profileName,
+			vaultData.Secrets,
 		),
 	}
 

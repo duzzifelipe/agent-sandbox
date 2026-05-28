@@ -3,17 +3,24 @@ package vm
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 )
 
-// BuildUserData returns cloud-init user-data that injects SSH keys and agent env.
-// Session state is tracked by polling the Hetzner API, not by a VM callback.
-func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
+// BuildUserData returns cloud-init user-data that injects SSH keys, agent env vars,
+// and any per-profile secrets as additional env vars in /etc/agentsdx.env.
+func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string, secrets map[string]string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
+
+	var extraEnv strings.Builder
+	for k, v := range secrets {
+		fmt.Fprintf(&extraEnv, "      %s=%s\n", k, v)
+	}
+
 	return fmt.Sprintf(`#cloud-config
 ssh_authorized_keys:
   - %s
 write_files:
-  - path: /home/ubuntu/.ssh/id_rsa
+  - path: /root/.ssh/id_rsa
     permissions: '0600'
     encoding: b64
     content: %s
@@ -23,7 +30,7 @@ write_files:
       AGENTSDX_SERVER_URL=%s
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
-runcmd:
-  - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-`, authorizedKey, encodedKey, serverURL, sessionID, profileName)
+%sruncmd:
+  - mkdir -p /root/.ssh && chmod 700 /root/.ssh
+`, authorizedKey, encodedKey, serverURL, sessionID, profileName, extraEnv.String())
 }
