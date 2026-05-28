@@ -65,6 +65,9 @@ func (h *Handler) Router() http.Handler {
 	r.Put("/profiles/{name}", h.updateProfile)
 	r.Delete("/profiles/{name}", h.deleteProfile)
 	r.Post("/profiles/{name}/credentials", h.setCredentials)
+	r.Put("/profiles/{name}/secrets/{key}", h.setSecret)
+	r.Delete("/profiles/{name}/secrets/{key}", h.deleteSecret)
+	r.Get("/profiles/{name}/secrets", h.listSecrets)
 
 	r.Post("/sessions", h.createSession)
 	r.Get("/sessions/{id}", h.getSession)
@@ -330,6 +333,96 @@ func (h *Handler) getAgentState(w http.ResponseWriter, r *http.Request) {
 
 	// No agent state yet.
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) setSecret(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	key := chi.URLParam(r, "key")
+
+	var req struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	var vd types.VaultData
+	if vault.VaultExists(h.vaultDir, name) {
+		loaded, err := vault.LoadVaultData(h.vaultDir, name, h.vaultSecret)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "load vault")
+			return
+		}
+		vd = loaded
+	} else {
+		vmPriv, vmPub, err := vault.GenerateKeyPair()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "generate vm key pair")
+			return
+		}
+		gitPriv, gitPub, err := vault.GenerateKeyPair()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "generate git key pair")
+			return
+		}
+		vd = types.DefaultVaultData()
+		vd.VMAccessPrivateKey = vmPriv
+		vd.VMAccessPublicKey = vmPub
+		vd.GitPrivateKey = gitPriv
+		vd.GitPublicKey = gitPub
+	}
+
+	if vd.Secrets == nil {
+		vd.Secrets = make(map[string]string)
+	}
+	vd.Secrets[key] = req.Value
+
+	if err := vault.StoreVaultData(h.vaultDir, name, h.vaultSecret, vd); err != nil {
+		writeError(w, http.StatusInternalServerError, "store vault")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) deleteSecret(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	key := chi.URLParam(r, "key")
+
+	if !vault.VaultExists(h.vaultDir, name) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	vd, err := vault.LoadVaultData(h.vaultDir, name, h.vaultSecret)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load vault")
+		return
+	}
+	delete(vd.Secrets, key)
+	if err := vault.StoreVaultData(h.vaultDir, name, h.vaultSecret, vd); err != nil {
+		writeError(w, http.StatusInternalServerError, "store vault")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) listSecrets(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if !vault.VaultExists(h.vaultDir, name) {
+		writeJSON(w, http.StatusOK, []string{})
+		return
+	}
+	vd, err := vault.LoadVaultData(h.vaultDir, name, h.vaultSecret)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load vault")
+		return
+	}
+	keys := make([]string, 0, len(vd.Secrets))
+	for k := range vd.Secrets {
+		keys = append(keys, k)
+	}
+	writeJSON(w, http.StatusOK, keys)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
