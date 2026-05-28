@@ -76,6 +76,27 @@ func (s *Store) UpdateVMID(id, vmID string) error {
 	return nil
 }
 
+// ListActive returns all session records in running or starting state.
+func (s *Store) ListActive() ([]SessionRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, profile_name, state, COALESCE(ip_address, ''), ssh_port, COALESCE(vm_id, '') FROM sessions WHERE state IN ('running', 'starting')`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query active sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var recs []SessionRecord
+	for rows.Next() {
+		var rec SessionRecord
+		if err := rows.Scan(&rec.ID, &rec.Profile, &rec.State, &rec.IPAddress, &rec.SSHPort, &rec.VMID); err != nil {
+			return nil, fmt.Errorf("scan session: %w", err)
+		}
+		recs = append(recs, rec)
+	}
+	return recs, rows.Err()
+}
+
 // UpdateState sets the state, ip_address, and ssh_port of a session.
 func (s *Store) UpdateState(id, state, ipAddress string, sshPort int) error {
 	res, err := s.db.Exec(

@@ -27,12 +27,8 @@ func main() {
 
 	root.AddCommand(
 		newProfilesCmd(c),
-		newCreateCmd(c),
-		newRunCmd(c, s),
-		newStopCmd(c, s),
+		newSessionCmd(c, s),
 		newCredentialsCmd(c),
-		newSyncCmd(c, s),
-		newImagesCmd(c),
 	)
 
 	if err := root.Execute(); err != nil {

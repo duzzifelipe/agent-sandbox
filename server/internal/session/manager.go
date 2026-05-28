@@ -111,6 +111,21 @@ func (m *Manager) Stop(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+// StopAll destroys every active session. Intended to be called on server shutdown.
+func (m *Manager) StopAll(ctx context.Context) {
+	recs, err := m.store.ListActive()
+	if err != nil {
+		log.Printf("StopAll: list active sessions: %v", err)
+		return
+	}
+	for _, rec := range recs {
+		log.Printf("StopAll: stopping session %s (profile %s)", rec.ID, rec.Profile)
+		if err := m.Stop(ctx, rec.ID); err != nil {
+			log.Printf("StopAll: stop session %s: %v", rec.ID, err)
+		}
+	}
+}
+
 // Get returns the current session state as a SessionResponse.
 func (m *Manager) Get(sessionID string) (types.SessionResponse, error) {
 	rec, err := m.store.Get(sessionID)

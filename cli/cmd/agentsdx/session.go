@@ -13,7 +13,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
+func newSessionCmd(c *client.Client, s *state.State) *cobra.Command {
+	parent := &cobra.Command{
+		Use:   "session",
+		Short: "Interact with sessions",
+	}
+	parent.AddCommand(newSessionRunCmd(c, s))
+	parent.AddCommand(newSessionStopCmd(c, s))
+
+	return parent
+}
+
+func newSessionRunCmd(c *client.Client, s *state.State) *cobra.Command {
 	return &cobra.Command{
 		Use:   "run <profile>",
 		Short: "Start a sandbox session and open an SSH connection",
@@ -88,6 +99,7 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 	}
 }
 
+
 func waitForRunning(c *client.Client, sessionID string) (types.SessionResponse, error) {
 	for {
 		session, err := c.GetSession(sessionID)
@@ -103,5 +115,30 @@ func waitForRunning(c *client.Client, sessionID string) (types.SessionResponse, 
 			fmt.Print(".")
 			time.Sleep(3 * time.Second)
 		}
+	}
+}
+
+func newSessionStopCmd(c *client.Client, s *state.State) *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop <profile>",
+		Short: "Stop a running sandbox session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profile := args[0]
+
+			sessionID, ok := s.Get(profile)
+			if !ok {
+				return fmt.Errorf("no active session found for profile %q", profile)
+			}
+
+			fmt.Printf("Stopping session %s...\n", sessionID)
+			if err := c.StopSession(sessionID); err != nil {
+				return fmt.Errorf("stop session: %w", err)
+			}
+
+			s.Delete(profile)
+			fmt.Println("Session stopped.")
+			return nil
+		},
 	}
 }

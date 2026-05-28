@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
@@ -79,8 +82,23 @@ func runServe() {
 
 	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 
-	log.Printf("agentsdxd listening on %s", addr)
-	if err := http.ListenAndServe(addr, h.Router()); err != nil {
-		log.Fatalf("listen: %v", err)
+	srv := &http.Server{Addr: addr, Handler: h.Router()}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("agentsdxd listening on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %v", err)
+		}
+	}()
+
+	<-quit
+	log.Println("agentsdxd shutting down — stopping active sessions")
+	mgr.StopAll(context.Background())
+
+	if err := srv.Shutdown(context.Background()); err != nil {
+		log.Printf("http shutdown: %v", err)
 	}
 }

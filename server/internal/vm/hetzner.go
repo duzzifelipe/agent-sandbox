@@ -202,7 +202,7 @@ func (p *HetznerProvider) DestroyBuildVM(ctx context.Context, vmID string) error
 func (p *HetznerProvider) deleteServerAndKey(ctx context.Context, vmID string) error {
 	id, err := strconv.ParseInt(vmID, 10, 64)
 	if err != nil {
-		return nil
+		return fmt.Errorf("vmID %q is not a Hetzner server ID", vmID)
 	}
 	server, _, err := p.servers.GetByID(ctx, id)
 	if err != nil {
