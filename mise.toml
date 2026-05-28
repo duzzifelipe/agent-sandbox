@@ -17,4 +17,24 @@ description = "Build both the server and the cli"
 run = [
     {task = "build:server"},
     {task = "build:cli"}
-] 
+]
+
+[tasks."test:server"]
+description = "Run server tests"
+run = "cd server && go test -count=1 ./..."
+
+[tasks."test:cli"]
+description = "Run cli tests"
+run = "cd cli && go test -count=1 ./..."
+
+[tasks."test:shared"]
+description = "Run shared tests"
+run = "cd shared && go test -count=1 ./..."
+
+[tasks.test]
+description = "Run all tests"
+run = [
+    {task = "test:shared"},
+    {task = "test:server"},
+    {task = "test:cli"},
+]

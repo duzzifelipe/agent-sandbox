@@ -282,7 +282,6 @@ func TestWriteOrchestrationScript_ContainsBashCalls(t *testing.T) {
 		`bash "/path/one"`,
 		`bash "/path/two"`,
 		"/usr/local/bin/entrypoint.sh",
-		"/usr/local/bin/vault-sync.sh",
 		"agents/claude/entrypoint.sh",
 	} {
 		if !strings.Contains(content, want) {

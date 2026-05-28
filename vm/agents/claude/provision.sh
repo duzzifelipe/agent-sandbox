@@ -11,9 +11,6 @@ chown 1000:1000 /home/ubuntu
 # Run installer as ubuntu — the native build writes to ~/.claude and ~/.local
 su ubuntu -c 'curl -fsSL https://claude.ai/install.sh | bash'
 
-cp /tmp/agentsdx-vm/vault-sync.sh /usr/local/bin/vault-sync.sh
-chmod +x /usr/local/bin/vault-sync.sh
-
 cp /tmp/agentsdx-vm/agents/claude/entrypoint.sh /usr/local/bin/agentsdx-entrypoint.sh
 chmod +x /usr/local/bin/agentsdx-entrypoint.sh
 

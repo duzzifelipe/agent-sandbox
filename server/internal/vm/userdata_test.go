@@ -12,7 +12,7 @@ func TestBuildUserData_ContainsSSHKey(t *testing.T) {
 	if !strings.Contains(ud, "ssh-rsa AAAA...") {
 		t.Errorf("user-data missing authorized key")
 	}
-	if !strings.Contains(ud, "/root/.ssh/id_rsa") {
+	if !strings.Contains(ud, "/home/ubuntu/.ssh/id_rsa") {
 		t.Errorf("user-data missing id_rsa write_files entry")
 	}
 }

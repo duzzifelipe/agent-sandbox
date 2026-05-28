@@ -20,7 +20,7 @@ func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileNa
 ssh_authorized_keys:
   - %s
 write_files:
-  - path: /root/.ssh/id_rsa
+  - path: /home/ubuntu/.ssh/id_rsa
     permissions: '0600'
     encoding: b64
     content: %s
@@ -31,6 +31,6 @@ write_files:
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
 %sruncmd:
-  - mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
 `, authorizedKey, encodedKey, serverURL, sessionID, profileName, extraEnv.String())
 }

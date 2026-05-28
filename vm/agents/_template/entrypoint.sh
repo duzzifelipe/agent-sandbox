@@ -25,7 +25,5 @@ if [[ "$HTTP_STATUS" == "200" ]] && [[ -s "$STATE_FILE" ]]; then
 fi
 rm -f "$STATE_FILE"
 
-trap '/usr/local/bin/vault-sync.sh' EXIT
-
 # TODO: replace with the actual agent binary.
 exec <agent-binary>
