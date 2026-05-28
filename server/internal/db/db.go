@@ -40,10 +40,13 @@ func migrate(conn *sql.DB) error {
 
 	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS profiles (
         name TEXT PRIMARY KEY,
+        spec TEXT NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`); err != nil {
 		return fmt.Errorf("create profiles table: %w", err)
 	}
+	// Add spec column to existing databases (safe no-op on new DBs).
+	_, _ = tx.Exec(`ALTER TABLE profiles ADD COLUMN spec TEXT NOT NULL DEFAULT ''`)
 
 	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,

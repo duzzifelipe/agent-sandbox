@@ -150,11 +150,7 @@ func TestHandler_CreateSession(t *testing.T) {
 }
 
 func TestBuildImage_Accepted(t *testing.T) {
-	h, dir := newHandler(t)
-
-	conn, _ := db.Open(filepath.Join(dir, "test.db"))
-	conn.Exec("INSERT INTO profiles (name, spec) VALUES (?, ?)", "dev", `{"name":"dev","infrastructure":{"provider":"hetzner","image":"ubuntu-24.04"}}`)
-	conn.Close()
+	h, _ := newHandler(t)
 
 	// Create the profile in the profile store via the API.
 	spec := types.ProfileSpec{
