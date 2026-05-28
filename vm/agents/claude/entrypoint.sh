@@ -17,20 +17,20 @@ fi
 : "${AGENTSDX_PROFILE:?AGENTSDX_PROFILE is not set}"
 
 # Ensure git SSH key permissions (cloud-init sets mode, but be defensive).
-chmod 600 /root/.ssh/id_rsa
-chmod 700 /root/.ssh
+chmod 600 ~/.ssh/id_rsa
+chmod 700 ~/.ssh
 
 # Configure SSH to use the git key for code hosts.
-cat > /root/.ssh/config <<'EOF'
+cat > ~/.ssh/config <<'EOF'
 Host github.com
-    IdentityFile /root/.ssh/id_rsa
+    IdentityFile ~/.ssh/id_rsa
     StrictHostKeyChecking accept-new
 
 Host gitlab.com
-    IdentityFile /root/.ssh/id_rsa
+    IdentityFile ~/.ssh/id_rsa
     StrictHostKeyChecking accept-new
 EOF
-chmod 600 /root/.ssh/config
+chmod 600 ~/.ssh/config
 
 # Restore agent state (claude memory, settings) from server vault.
 STATE_FILE="$(mktemp /tmp/agent-state-XXXXXX.tar)"

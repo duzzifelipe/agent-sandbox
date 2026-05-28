@@ -139,9 +139,11 @@ func (p *LocalProvider) CreateBuildVM(ctx context.Context, baseImage, authorized
 	vmID := uuid.New().String()
 
 	// Launch QEMU
+	qemuLog := filepath.Join(tmpDir, "qemu.log")
+	log.Printf("local provider: starting build VM %s (logs: %s)", vmID, qemuLog)
 	pidFile := filepath.Join(tmpDir, "qemu.pid")
 	if err := p.exec.StartDetached(
-		filepath.Join(tmpDir, "qemu.log"),
+		qemuLog,
 		"qemu-system-aarch64",
 		"-nographic",
 		"-machine", "virt",
@@ -254,13 +256,14 @@ func (p *LocalProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM,
 	}
 
 	// Write user-data
+	log.Printf("local provider: session VM %s user-data:\n%s", vmID, req.UserData)
 	if err := os.WriteFile(filepath.Join(tmpDir, "user-data"), []byte(req.UserData), 0644); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("write user-data: %w", err)
 	}
 
-	// Write meta-data
-	metaData := "instance-id: agentsdx-session\nlocal-hostname: agentsdx-session\n"
+	// Write meta-data — instance-id must be unique per session so cloud-init reruns write_files.
+	metaData := fmt.Sprintf("instance-id: %s\nlocal-hostname: agentsdx-session\n", vmID)
 	if err := os.WriteFile(filepath.Join(tmpDir, "meta-data"), []byte(metaData), 0644); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("write meta-data: %w", err)
@@ -278,9 +281,11 @@ func (p *LocalProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM,
 		return nil, fmt.Errorf("find free port: %w", err)
 	}
 
+	qemuLog := filepath.Join(tmpDir, "qemu.log")
+	log.Printf("local provider: starting session VM %s (logs: %s)", vmID, qemuLog)
 	pidFile := filepath.Join(tmpDir, "qemu.pid")
 	if err := p.exec.StartDetached(
-		filepath.Join(tmpDir, "qemu.log"),
+		qemuLog,
 		"qemu-system-aarch64",
 		"-nographic",
 		"-machine", "virt",

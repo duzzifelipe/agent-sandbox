@@ -40,8 +40,8 @@ func runWizard() (types.ProfileSpec, error) {
 
 	if err := survey.AskOne(&survey.Select{
 		Message: "VM provider:",
-		Options: []string{"hetzner"},
-		Default: "hetzner",
+		Options: []string{"local", "hetzner"},
+		Default: "local",
 	}, &spec.Infrastructure.Provider); err != nil {
 		return spec, err
 	}

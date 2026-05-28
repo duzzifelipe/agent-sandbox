@@ -48,6 +48,9 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("create temp key file: %w", err)
 			}
+
+			fmt.Printf("Using temporary SSH key file: %s\n", keyFile.Name())
+
 			defer os.Remove(keyFile.Name())
 
 			if _, err := keyFile.WriteString(privateKey); err != nil {
@@ -75,7 +78,7 @@ func newRunCmd(c *client.Client, s *state.State) *cobra.Command {
 				sshArgs = append(sshArgs, "-p", fmt.Sprintf("%d", session.SSHPort))
 			}
 			sshArgs = append(sshArgs,
-				fmt.Sprintf("root@%s", session.IPAddress),
+				fmt.Sprintf("ubuntu@%s", session.IPAddress),
 				"/usr/local/bin/entrypoint.sh",
 			)
 

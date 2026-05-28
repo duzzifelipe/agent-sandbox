@@ -10,24 +10,20 @@ import (
 func BuildUserData(authorizedKey, gitPrivateKey, sessionID, serverURL, profileName string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
 	return fmt.Sprintf(`#cloud-config
+ssh_authorized_keys:
+  - %s
 write_files:
-  - path: /root/.ssh/authorized_keys
-    permissions: '0600'
-    content: |
-      %s
-  - path: /root/.ssh/id_rsa
+  - path: /home/ubuntu/.ssh/id_rsa
     permissions: '0600'
     encoding: b64
     content: %s
   - path: /etc/agentsdx.env
-    permissions: '0600'
+    permissions: '0644'
     content: |
       AGENTSDX_SERVER_URL=%s
       AGENTSDX_SESSION_ID=%s
       AGENTSDX_PROFILE=%s
 runcmd:
-  - mkdir -p /root/.ssh && chmod 700 /root/.ssh
-  - sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-  - systemctl reload ssh
+  - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
 `, authorizedKey, encodedKey, serverURL, sessionID, profileName)
 }

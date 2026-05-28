@@ -111,6 +111,7 @@ bash "{{.}}"
 cp "/tmp/agentsdx-vm/agents/{{.Agent}}/entrypoint.sh" /usr/local/bin/entrypoint.sh
 cp /tmp/agentsdx-vm/vault-sync.sh /usr/local/bin/vault-sync.sh
 chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/vault-sync.sh
+sync
 `
 
 // writeOrchestrationScript writes a temp bash script that runs provision scripts in order.
