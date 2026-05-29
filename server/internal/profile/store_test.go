@@ -84,28 +84,6 @@ func TestStore_List_ReturnsAllProfiles(t *testing.T) {
 	}
 }
 
-func TestStore_Delete_RemovesProfile(t *testing.T) {
-	s := newStore(t)
-	spec := sampleSpec("to-delete")
-
-	if err := s.Create(spec); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if err := s.Delete(spec.Name); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := s.Get(spec.Name); err == nil {
-		t.Error("Get after Delete: expected error, got nil")
-	}
-	all, err := s.List()
-	if err != nil {
-		t.Fatalf("List after Delete: %v", err)
-	}
-	if len(all) != 0 {
-		t.Errorf("expected empty list after delete, got %v", all)
-	}
-}
-
 func TestStore_Create_FailsOnDuplicate(t *testing.T) {
 	s := newStore(t)
 	spec := sampleSpec("dup-profile")

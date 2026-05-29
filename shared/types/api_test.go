@@ -77,21 +77,3 @@ func TestBuildImageRequest_JSON(t *testing.T) {
 		t.Errorf("ProfileName: got %q, want %q", got.ProfileName, "work-backend")
 	}
 }
-
-func TestImageEntry_JSON(t *testing.T) {
-	entry := types.ImageEntry{
-		ProfileName: "work-backend",
-		Hetzner:     "snap-12345",
-	}
-	data, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var got types.ImageEntry
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Hetzner != "snap-12345" {
-		t.Errorf("Hetzner: got %q, want %q", got.Hetzner, "snap-12345")
-	}
-}

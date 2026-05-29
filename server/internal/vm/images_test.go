@@ -17,51 +17,6 @@ func writeImagesJSON(t *testing.T, dir string, data map[string]vm.ImageRecord) s
 	return path
 }
 
-func TestImageStore_List_Empty(t *testing.T) {
-	dir := t.TempDir()
-	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	entries, err := store.List()
-	if err != nil {
-		t.Fatalf("List on missing file: %v", err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("expected 0 entries, got %d", len(entries))
-	}
-}
-
-func TestImageStore_List_ReturnsAll(t *testing.T) {
-	dir := t.TempDir()
-	writeImagesJSON(t, dir, map[string]vm.ImageRecord{
-		"profile-a": {vm.ProviderHetzner: "snap-a"},
-		"profile-b": {vm.ProviderHetzner: "snap-b", vm.ProviderLocal: "local-b"},
-	})
-	store := vm.NewImageStore(filepath.Join(dir, "images.json"))
-	entries, err := store.List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
-	type entry struct{ hetzner, local string }
-	seen := make(map[string]entry)
-	for _, e := range entries {
-		seen[e.ProfileName] = entry{hetzner: e.Hetzner, local: e.Local}
-	}
-	if seen["profile-a"].hetzner != "snap-a" {
-		t.Errorf("profile-a hetzner: got %q", seen["profile-a"].hetzner)
-	}
-	if seen["profile-a"].local != "" {
-		t.Errorf("profile-a local: expected empty, got %q", seen["profile-a"].local)
-	}
-	if seen["profile-b"].hetzner != "snap-b" {
-		t.Errorf("profile-b hetzner: got %q", seen["profile-b"].hetzner)
-	}
-	if seen["profile-b"].local != "local-b" {
-		t.Errorf("profile-b local: got %q", seen["profile-b"].local)
-	}
-}
-
 func TestImageStore_SetAndGetHetznerSnapshotID(t *testing.T) {
 	dir := t.TempDir()
 	store := vm.NewImageStore(filepath.Join(dir, "images.json"))

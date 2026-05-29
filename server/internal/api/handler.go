@@ -15,7 +15,6 @@ import (
 	"github.com/duck-labs/agentsdx-server/internal/profile"
 	"github.com/duck-labs/agentsdx-server/internal/session"
 	"github.com/duck-labs/agentsdx-server/internal/vault"
-	"github.com/duck-labs/agentsdx-server/internal/vm"
 	"github.com/duck-labs/agentsdx-shared/types"
 )
 
@@ -28,7 +27,6 @@ type ImageBuilder interface {
 type Handler struct {
 	profiles    *profile.Store
 	sessions    *session.Manager
-	images      *vm.ImageStore
 	builder     ImageBuilder
 	vaultDir    string
 	vaultSecret string
@@ -38,7 +36,6 @@ type Handler struct {
 func NewHandler(
 	profiles *profile.Store,
 	sessions *session.Manager,
-	images *vm.ImageStore,
 	builder ImageBuilder,
 	vaultDir string,
 	vaultSecret string,
@@ -46,7 +43,6 @@ func NewHandler(
 	return &Handler{
 		profiles:    profiles,
 		sessions:    sessions,
-		images:      images,
 		builder:     builder,
 		vaultDir:    vaultDir,
 		vaultSecret: vaultSecret,
@@ -61,9 +57,6 @@ func (h *Handler) Router() http.Handler {
 
 	r.Get("/profiles", h.listProfiles)
 	r.Post("/profiles", h.createProfile)
-	r.Get("/profiles/{name}", h.getProfile)
-	r.Put("/profiles/{name}", h.updateProfile)
-	r.Delete("/profiles/{name}", h.deleteProfile)
 	r.Post("/profiles/{name}/credentials", h.setCredentials)
 	r.Put("/profiles/{name}/secrets/{key}", h.setSecret)
 	r.Delete("/profiles/{name}/secrets/{key}", h.deleteSecret)
@@ -72,11 +65,8 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/sessions", h.createSession)
 	r.Get("/sessions/{id}", h.getSession)
 	r.Get("/sessions/{id}/key", h.getSessionKey)
-	r.Get("/sessions/{id}/agent-state", h.getAgentState)
 	r.Post("/sessions/{id}/stop", h.stopSession)
-	r.Post("/sessions/{id}/vault-sync", h.vaultSync)
 	r.Post("/images/build", h.buildImage)
-	r.Get("/images", h.listImages)
 
 	return r
 }
@@ -101,44 +91,6 @@ func (h *Handler) createProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, spec)
-}
-
-func (h *Handler) getProfile(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	spec, err := h.profiles.Get(name)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, spec)
-}
-
-func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	var spec types.ProfileSpec
-	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	spec.Name = name
-	if err := h.profiles.Delete(name); err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-	if err := h.profiles.Create(spec); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, spec)
-}
-
-func (h *Handler) deleteProfile(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	if err := h.profiles.Delete(name); err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) setCredentials(w http.ResponseWriter, r *http.Request) {
@@ -235,38 +187,6 @@ func (h *Handler) stopSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) vaultSync(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	resp, err := h.sessions.Get(id)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-
-	tarball, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body")
-		return
-	}
-
-	key, err := vault.DeriveKey(h.vaultSecret, resp.Profile+"-agent-state")
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "derive key")
-		return
-	}
-	encrypted, err := vault.Encrypt(key, tarball)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "encrypt")
-		return
-	}
-	path := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar.enc")
-	if err := os.WriteFile(path, encrypted, 0600); err != nil {
-		writeError(w, http.StatusInternalServerError, "store agent state")
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
 	var req types.BuildImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -284,55 +204,6 @@ func (h *Handler) buildImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "building", "profile": req.ProfileName})
-}
-
-func (h *Handler) listImages(w http.ResponseWriter, r *http.Request) {
-	entries, err := h.images.List()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, entries)
-}
-
-func (h *Handler) getAgentState(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	resp, err := h.sessions.Get(id)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-
-	// Try encrypted agent state first (from vault-sync).
-	encPath := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar.enc")
-	if encData, err := os.ReadFile(encPath); err == nil {
-		key, err := vault.DeriveKey(h.vaultSecret, resp.Profile+"-agent-state")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "derive key")
-			return
-		}
-		plaintext, err := vault.Decrypt(key, encData)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "decrypt agent state")
-			return
-		}
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
-		w.Write(plaintext)
-		return
-	}
-
-	// Fall back to plain agent state tarball (from setCredentials).
-	rawPath := filepath.Join(h.vaultDir, resp.Profile+"-agent-state.tar")
-	if rawData, err := os.ReadFile(rawPath); err == nil {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
-		w.Write(rawData)
-		return
-	}
-
-	// No agent state yet.
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) setSecret(w http.ResponseWriter, r *http.Request) {

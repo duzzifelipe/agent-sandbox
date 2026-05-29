@@ -84,7 +84,7 @@ func runServe() {
 	mgr := session.NewManager(sessionStore, vmProviders, images, filepath.Join(dataDir, "vault"), secret, serverURL)
 	imageBuilder := builder.New(vmDir, images, imgProviders)
 
-	h := api.NewHandler(profileStore, mgr, images, imageBuilder, filepath.Join(dataDir, "vault"), secret)
+	h := api.NewHandler(profileStore, mgr, imageBuilder, filepath.Join(dataDir, "vault"), secret)
 
 	srv := &http.Server{Addr: addr, Handler: h.Router()}
 

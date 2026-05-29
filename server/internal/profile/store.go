@@ -75,15 +75,3 @@ func (s *Store) List() ([]types.ProfileSpec, error) {
 	}
 	return specs, nil
 }
-
-func (s *Store) Delete(name string) error {
-	res, err := s.db.Exec(`DELETE FROM profiles WHERE name = ?`, name)
-	if err != nil {
-		return fmt.Errorf("delete profile: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("profile %q not found", name)
-	}
-	return nil
-}

@@ -27,9 +27,3 @@ type VMKeyResponse struct {
 type BuildImageRequest struct {
 	ProfileName string `json:"profile_name"`
 }
-
-type ImageEntry struct {
-	ProfileName string `json:"profile_name"`
-	Hetzner     string `json:"hetzner,omitempty"`
-	Local       string `json:"local,omitempty"`
-}
