@@ -19,4 +19,6 @@ apt-get install -y docker-ce docker-ce-cli containerd.io
 
 systemctl enable docker
 
+usermod -aG docker ubuntu
+
 echo "docker provisioning complete"
