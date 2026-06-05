@@ -171,6 +171,9 @@ func (p *LocalProvider) CreateBuildVM(ctx context.Context, baseImage, authorized
 func (p *LocalProvider) SnapshotVM(ctx context.Context, vmID, snapshotName string) (string, error) {
 	p.mu.Lock()
 	rec, ok := p.vms[vmID]
+	if ok {
+		delete(p.vms, vmID)
+	}
 	p.mu.Unlock()
 	if !ok {
 		return "", fmt.Errorf("vm %q not found", vmID)
@@ -191,10 +194,6 @@ func (p *LocalProvider) SnapshotVM(ctx context.Context, vmID, snapshotName strin
 	os.Remove(rec.overlayPath)
 	os.Remove(rec.seedISOPath)
 	os.Remove(filepath.Dir(rec.overlayPath)) //nolint:errcheck
-
-	p.mu.Lock()
-	delete(p.vms, vmID)
-	p.mu.Unlock()
 
 	return snapshotPath, nil
 }
