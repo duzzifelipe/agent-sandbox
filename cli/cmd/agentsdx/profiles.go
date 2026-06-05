@@ -195,8 +195,6 @@ func repoNameFromURL(rawURL string) (string, error) {
 	var segment string
 	if idx := strings.LastIndex(rawURL, "/"); idx >= 0 {
 		segment = rawURL[idx+1:]
-	} else if idx := strings.LastIndex(rawURL, ":"); idx >= 0 {
-		segment = rawURL[idx+1:]
 	} else {
 		segment = rawURL
 	}

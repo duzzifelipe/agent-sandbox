@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -309,7 +310,11 @@ func (h *Handler) addProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.profiles.AddProject(name, proj); err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, err.Error())
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -37,7 +37,7 @@ write_files:
     encoding: b64
     content: %s
   - path: /etc/agentsdx.env
-    permissions: '0644'
+    permissions: '0600'
     content: |
       AGENTSDX_SERVER_URL=%s
       AGENTSDX_SESSION_ID=%s
