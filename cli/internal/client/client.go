@@ -170,3 +170,16 @@ func (c *Client) ListSecrets(profile string) ([]string, error) {
 	var keys []string
 	return keys, json.NewDecoder(resp.Body).Decode(&keys)
 }
+
+func (c *Client) AddProject(profile string, proj types.ProjectConfig) error {
+	body, _ := json.Marshal(proj)
+	resp, err := c.http.Post(c.base+"/profiles/"+profile+"/projects", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	return nil
+}

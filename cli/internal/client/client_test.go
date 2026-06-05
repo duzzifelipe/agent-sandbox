@@ -162,3 +162,33 @@ func TestBuildImage(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAddProject(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/profiles/myprofile/projects" || r.Method != http.MethodPost {
+			http.Error(w, "unexpected", 400)
+			return
+		}
+		var proj types.ProjectConfig
+		if err := json.NewDecoder(r.Body).Decode(&proj); err != nil {
+			http.Error(w, "decode", 400)
+			return
+		}
+		if proj.Repo != "https://github.com/org/api.git" {
+			http.Error(w, "wrong repo", 400)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	proj := types.ProjectConfig{
+		Repo:         "https://github.com/org/api.git",
+		Path:         "~/api",
+		AuthTokenEnv: "GITHUB_TOKEN",
+	}
+	if err := c.AddProject("myprofile", proj); err != nil {
+		t.Fatal(err)
+	}
+}
