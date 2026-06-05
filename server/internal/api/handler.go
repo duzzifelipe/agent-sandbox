@@ -61,6 +61,7 @@ func (h *Handler) Router() http.Handler {
 	r.Put("/profiles/{name}/secrets/{key}", h.setSecret)
 	r.Delete("/profiles/{name}/secrets/{key}", h.deleteSecret)
 	r.Get("/profiles/{name}/secrets", h.listSecrets)
+	r.Post("/profiles/{name}/projects", h.addProject)
 
 	r.Post("/sessions", h.createSession)
 	r.Get("/sessions/{id}", h.getSession)
@@ -294,6 +295,24 @@ func (h *Handler) listSecrets(w http.ResponseWriter, r *http.Request) {
 		keys = append(keys, k)
 	}
 	writeJSON(w, http.StatusOK, keys)
+}
+
+func (h *Handler) addProject(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	var proj types.ProjectConfig
+	if err := json.NewDecoder(r.Body).Decode(&proj); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if proj.Repo == "" {
+		writeError(w, http.StatusBadRequest, "repo is required")
+		return
+	}
+	if err := h.profiles.AddProject(name, proj); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

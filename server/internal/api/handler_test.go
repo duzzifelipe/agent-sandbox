@@ -290,3 +290,91 @@ func TestHandler_ListSecrets_EmptyWhenNoVault(t *testing.T) {
 		t.Errorf("expected empty list, got %v", keys)
 	}
 }
+
+func TestAddProject_Success(t *testing.T) {
+	h, _ := newHandler(t)
+
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	h.Router().ServeHTTP(w, r)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create profile got %d", w.Code)
+	}
+
+	proj := types.ProjectConfig{
+		Repo: "https://github.com/org/api.git",
+		Path: "~/api",
+	}
+	body, _ = json.Marshal(proj)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/profiles/dev/projects", bytes.NewReader(body))
+	h.Router().ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("add project got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/profiles", nil)
+	h.Router().ServeHTTP(w, r)
+	var profiles []types.ProfileSpec
+	if err := json.NewDecoder(w.Body).Decode(&profiles); err != nil {
+		t.Fatalf("decode profiles: %v", err)
+	}
+	if len(profiles) != 1 || len(profiles[0].Projects) != 1 {
+		t.Fatalf("expected 1 profile with 1 project, got %+v", profiles)
+	}
+	if profiles[0].Projects[0].Repo != proj.Repo {
+		t.Errorf("unexpected repo: %s", profiles[0].Projects[0].Repo)
+	}
+}
+
+func TestAddProject_ProfileNotFound(t *testing.T) {
+	h, _ := newHandler(t)
+	proj := types.ProjectConfig{Repo: "https://github.com/org/api.git", Path: "~/api"}
+	body, _ := json.Marshal(proj)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/profiles/no-such/projects", bytes.NewReader(body))
+	h.Router().ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestAddProject_InvalidJSON(t *testing.T) {
+	h, _ := newHandler(t)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/profiles/dev/projects", bytes.NewReader([]byte("not-json")))
+	h.Router().ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAddProject_MissingRepo(t *testing.T) {
+	h, _ := newHandler(t)
+
+	spec := types.ProfileSpec{
+		Name:           "dev",
+		Infrastructure: types.InfrastructureConfig{Provider: "hetzner", Image: "ubuntu-24.04"},
+		Agent:          types.AgentConfig{Provider: "claude"},
+	}
+	body, _ := json.Marshal(spec)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/profiles", bytes.NewReader(body))
+	h.Router().ServeHTTP(w, r)
+
+	proj := types.ProjectConfig{Repo: "", Path: "~/api"}
+	body, _ = json.Marshal(proj)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/profiles/dev/projects", bytes.NewReader(body))
+	h.Router().ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
