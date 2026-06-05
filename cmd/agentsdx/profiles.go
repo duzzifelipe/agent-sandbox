@@ -224,21 +224,6 @@ func runWizard() (types.ProfileSpec, error) {
 		return spec, err
 	}
 
-	var skillsInput string
-	if err := survey.AskOne(&survey.Input{
-		Message: "Skills (comma-separated, optional):",
-		Help:    "e.g. superpowers/brainstorming,superpowers/tdd",
-	}, &skillsInput); err != nil {
-		return spec, err
-	}
-	if skillsInput != "" {
-		for _, s := range strings.Split(skillsInput, ",") {
-			if trimmed := strings.TrimSpace(s); trimmed != "" {
-				spec.Agent.Skills = append(spec.Agent.Skills, trimmed)
-			}
-		}
-	}
-
 	return spec, nil
 }
 
