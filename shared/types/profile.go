@@ -14,8 +14,9 @@ type InfrastructureConfig struct {
 }
 
 type ProjectConfig struct {
-	Repo string `yaml:"repo" json:"repo"`
-	Path string `yaml:"path" json:"path"`
+	Repo         string `yaml:"repo"           json:"repo"`
+	Path         string `yaml:"path"           json:"path"`
+	AuthTokenEnv string `yaml:"auth_token_env" json:"auth_token_env,omitempty"`
 }
 
 type AgentConfig struct {

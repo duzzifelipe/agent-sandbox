@@ -65,3 +65,39 @@ agent:
 		t.Errorf("roundtrip Name mismatch: %q vs %q", got2.Name, got.Name)
 	}
 }
+
+func TestProjectConfig_AuthTokenEnvRoundtrip(t *testing.T) {
+	input := `
+name: myprofile
+infrastructure:
+  provider: hetzner
+  image: ubuntu-24.04
+projects:
+  - repo: https://github.com/org/api.git
+    path: ~/api
+    auth_token_env: GITHUB_TOKEN
+agent:
+  provider: claude
+`
+	var got types.ProfileSpec
+	if err := yaml.Unmarshal([]byte(input), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(got.Projects))
+	}
+	if got.Projects[0].AuthTokenEnv != "GITHUB_TOKEN" {
+		t.Errorf("AuthTokenEnv: got %q, want %q", got.Projects[0].AuthTokenEnv, "GITHUB_TOKEN")
+	}
+	out, err := yaml.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got2 types.ProfileSpec
+	if err := yaml.Unmarshal(out, &got2); err != nil {
+		t.Fatalf("second unmarshal: %v", err)
+	}
+	if got2.Projects[0].AuthTokenEnv != "GITHUB_TOKEN" {
+		t.Errorf("roundtrip AuthTokenEnv: got %q, want %q", got2.Projects[0].AuthTokenEnv, "GITHUB_TOKEN")
+	}
+}
