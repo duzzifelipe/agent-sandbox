@@ -4,37 +4,10 @@ go = "1.26.3"
 [env]
 _.file = ".env"
 
-[tasks."build:server"]
-description = "Build the Server"
-run = "cd server && go build -o ../dist/agentsdxd ./cmd/agentsdxd && cd .."
-
-[tasks."build:cli"]
-description = "Build the cli"
-run = "cd cli && go build -o ../dist/agentsdx  ./cmd/agentsdx  && cd .."
-
 [tasks.build]
-description = "Build both the server and the cli"
-run = [
-    {task = "build:server"},
-    {task = "build:cli"}
-]
-
-[tasks."test:server"]
-description = "Run server tests"
-run = "cd server && go test -count=1 ./..."
-
-[tasks."test:cli"]
-description = "Run cli tests"
-run = "cd cli && go test -count=1 ./..."
-
-[tasks."test:shared"]
-description = "Run shared tests"
-run = "cd shared && go test -count=1 ./..."
+description = "Build agentsdx"
+run = "go build -o dist/agentsdx ./cmd/agentsdx"
 
 [tasks.test]
 description = "Run all tests"
-run = [
-    {task = "test:shared"},
-    {task = "test:server"},
-    {task = "test:cli"},
-]
+run = "go test -count=1 ./..."
