@@ -110,3 +110,41 @@ func TestStore_Get_NotFound(t *testing.T) {
 		t.Error("expected error for missing profile, got nil")
 	}
 }
+
+func TestStore_AddProject_AppendsProject(t *testing.T) {
+	s := newStore(t)
+	spec := sampleSpec("my-profile")
+	// sampleSpec already has 1 project
+	if err := s.Create(spec); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	newProj := types.ProjectConfig{
+		Repo:         "https://github.com/org/backend.git",
+		Path:         "~/backend",
+		AuthTokenEnv: "GITHUB_TOKEN",
+	}
+	if err := s.AddProject("my-profile", newProj); err != nil {
+		t.Fatalf("AddProject: %v", err)
+	}
+
+	got, err := s.Get("my-profile")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Projects) != 2 {
+		t.Fatalf("expected 2 projects, got %d: %+v", len(got.Projects), got.Projects)
+	}
+	last := got.Projects[len(got.Projects)-1]
+	if last.Repo != newProj.Repo || last.Path != newProj.Path || last.AuthTokenEnv != newProj.AuthTokenEnv {
+		t.Errorf("unexpected last project: %+v", last)
+	}
+}
+
+func TestStore_AddProject_ProfileNotFound(t *testing.T) {
+	s := newStore(t)
+	proj := types.ProjectConfig{Repo: "https://github.com/org/api.git", Path: "~/api"}
+	if err := s.AddProject("no-such", proj); err == nil {
+		t.Error("expected error for missing profile, got nil")
+	}
+}

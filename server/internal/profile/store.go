@@ -75,3 +75,20 @@ func (s *Store) List() ([]types.ProfileSpec, error) {
 	}
 	return specs, nil
 }
+
+func (s *Store) AddProject(name string, proj types.ProjectConfig) error {
+	spec, err := s.Get(name)
+	if err != nil {
+		return err
+	}
+	spec.Projects = append(spec.Projects, proj)
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("marshal profile spec: %w", err)
+	}
+	_, err = s.db.Exec(`UPDATE profiles SET spec = ? WHERE name = ?`, string(data), name)
+	if err != nil {
+		return fmt.Errorf("update profile: %w", err)
+	}
+	return nil
+}
