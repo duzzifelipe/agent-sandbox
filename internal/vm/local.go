@@ -225,7 +225,6 @@ func (p *LocalProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM,
 		os.RemoveAll(tmpDir)
 	}
 
-	log.Printf("local provider: session VM %s user-data:\n%s", vmID, req.UserData)
 	if err := os.WriteFile(filepath.Join(tmpDir, "user-data"), []byte(req.UserData), 0644); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("write user-data: %w", err)
