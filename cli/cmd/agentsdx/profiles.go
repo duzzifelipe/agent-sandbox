@@ -21,6 +21,7 @@ func newProfilesCmd(c *client.Client) *cobra.Command {
 	parent.AddCommand(newProfilesListCmd(c))
 	parent.AddCommand(newProfilesBuildCmd(c))
 	parent.AddCommand(newCreateProfileCmd(c))
+	parent.AddCommand(newProfilesRepoCmd(c))
 
 	return parent
 }
@@ -99,35 +100,6 @@ func runWizard() (types.ProfileSpec, error) {
 		}
 	}
 
-	for {
-		var addProject bool
-		if err := survey.AskOne(&survey.Confirm{
-			Message: "Add a project repository?",
-			Default: false,
-		}, &addProject); err != nil {
-			return spec, err
-		}
-		if !addProject {
-			break
-		}
-		var proj types.ProjectConfig
-		if err := survey.Ask([]*survey.Question{
-			{
-				Name:     "repo",
-				Prompt:   &survey.Input{Message: "Repo URL (e.g. https://github.com/org/repo.git):"},
-				Validate: survey.Required,
-			},
-			{
-				Name:     "path",
-				Prompt:   &survey.Input{Message: "Mount path in VM (e.g. ~/projects/api):"},
-				Validate: survey.Required,
-			},
-		}, &proj); err != nil {
-			return spec, err
-		}
-		spec.Projects = append(spec.Projects, proj)
-	}
-
 	return spec, nil
 }
 
@@ -170,4 +142,67 @@ func newProfilesListCmd(c *client.Client) *cobra.Command {
 			return w.Flush()
 		},
 	}
+}
+
+func newProfilesRepoCmd(c *client.Client) *cobra.Command {
+	parent := &cobra.Command{
+		Use:   "repo",
+		Short: "Manage repositories in a profile",
+	}
+	parent.AddCommand(newProfilesRepoAddCmd(c))
+	return parent
+}
+
+func newProfilesRepoAddCmd(c *client.Client) *cobra.Command {
+	var authTokenEnv string
+	cmd := &cobra.Command{
+		Use:   "add <profile> <repo-url> [path]",
+		Short: "Add a repository to a profile",
+		Args:  cobra.RangeArgs(2, 3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profile := args[0]
+			repoURL := args[1]
+
+			var mountPath string
+			if len(args) == 3 {
+				mountPath = args[2]
+			} else {
+				name, err := repoNameFromURL(repoURL)
+				if err != nil {
+					return fmt.Errorf("cannot derive path from %q: %w — provide an explicit path", repoURL, err)
+				}
+				mountPath = "~/" + name
+			}
+
+			proj := types.ProjectConfig{
+				Repo:         repoURL,
+				Path:         mountPath,
+				AuthTokenEnv: authTokenEnv,
+			}
+			if err := c.AddProject(profile, proj); err != nil {
+				return fmt.Errorf("add project: %w", err)
+			}
+			fmt.Printf("Repository %q added to profile %q (path: %s).\n", repoURL, profile, mountPath)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&authTokenEnv, "auth-token-env", "", "Name of the secret whose value is used as git auth token")
+	return cmd
+}
+
+func repoNameFromURL(rawURL string) (string, error) {
+	rawURL = strings.TrimSuffix(rawURL, "/")
+	var segment string
+	if idx := strings.LastIndex(rawURL, "/"); idx >= 0 {
+		segment = rawURL[idx+1:]
+	} else if idx := strings.LastIndex(rawURL, ":"); idx >= 0 {
+		segment = rawURL[idx+1:]
+	} else {
+		segment = rawURL
+	}
+	name := strings.TrimSuffix(segment, ".git")
+	if name == "" {
+		return "", fmt.Errorf("could not extract repo name from URL")
+	}
+	return name, nil
 }
