@@ -14,4 +14,8 @@ apt-get install -y \
     tar \
     openssh-server
 
+id ubuntu 2>/dev/null || useradd -m -s /bin/bash -u 1000 ubuntu
+mkdir -p /home/ubuntu
+chown 1000:1000 /home/ubuntu
+
 echo "base provisioning complete"
