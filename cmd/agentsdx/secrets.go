@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/duck-labs/agentsdx/internal/datadir"
 	"github.com/duck-labs/agentsdx/internal/vault"
@@ -22,11 +24,18 @@ func newSecretsCmd(vaultSecret string) *cobra.Command {
 
 func newSecretsSetCmd(vaultSecret string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <profile> <KEY> <VALUE>",
+		Use:   "set <profile> <KEY>",
 		Short: "Set or overwrite a secret for a profile",
-		Args:  cobra.ExactArgs(3),
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			profileName, key, value := args[0], args[1], args[2]
+			profileName, key := args[0], args[1]
+			fmt.Fprintf(os.Stderr, "Enter value for %q: ", key)
+			valueBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Fprintln(os.Stderr)
+			if err != nil {
+				return fmt.Errorf("read secret value: %w", err)
+			}
+			value := string(valueBytes)
 			vd, err := loadOrInitVault(profileName, vaultSecret)
 			if err != nil {
 				return err
