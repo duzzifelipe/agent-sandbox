@@ -9,8 +9,7 @@ import (
 type Provider string
 
 const (
-	ProviderHetzner Provider = "hetzner"
-	ProviderLocal   Provider = "local"
+	ProviderLocal Provider = "local"
 )
 
 type ImageRecord map[Provider]string

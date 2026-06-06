@@ -193,13 +193,7 @@ func runWizard() (types.ProfileSpec, error) {
 		return spec, err
 	}
 
-	if err := survey.AskOne(&survey.Select{
-		Message: "VM provider:",
-		Options: []string{"local", "hetzner"},
-		Default: "local",
-	}, &spec.Infrastructure.Provider); err != nil {
-		return spec, err
-	}
+	spec.Infrastructure.Provider = "local"
 
 	if err := survey.AskOne(&survey.Select{
 		Message: "Base OS image:",

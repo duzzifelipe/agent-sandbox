@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
 
 	"github.com/duck-labs/agentsdx/internal/datadir"
@@ -28,20 +27,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	vmProviders := map[string]vm.VMProvider{}
-	imageProviders := map[string]vm.ImageProvider{}
-
-	if token := os.Getenv("AGENTSDX_HCLOUD_TOKEN"); token != "" {
-		client := hcloud.NewClient(hcloud.WithToken(token))
-		location := os.Getenv("AGENTSDX_HCLOUD_LOCATION")
-		hp := vm.NewHetznerProvider(client, location)
-		vmProviders["hetzner"] = hp
-		imageProviders["hetzner"] = hp
-	}
-
 	lp := vm.NewLocalProvider(datadir.Dir())
-	vmProviders["local"] = lp
-	imageProviders["local"] = lp
+	vmProviders := map[string]vm.VMProvider{"local": lp}
+	imageProviders := map[string]vm.ImageProvider{"local": lp}
 
 	profiles := profile.NewStore(datadir.ProfilesDir())
 	images := vm.NewImageStore(datadir.ImagesFile())
