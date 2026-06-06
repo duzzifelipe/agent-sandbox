@@ -32,7 +32,7 @@ func newProfilesCmd(
 	}
 	parent.AddCommand(newProfilesListCmd(profiles))
 	parent.AddCommand(newProfilesCreateCmd(profiles))
-	parent.AddCommand(newProfilesRunCmd(profiles, images, vmProviders, vaultSecret))
+	parent.AddCommand(newProfilesRunCmd(profiles, images, vmProviders, imageProviders, vaultSecret))
 	parent.AddCommand(newProfilesBuildCmd(profiles, images, imageProviders, vaultSecret))
 	parent.AddCommand(newProfilesRepoCmd(profiles))
 	return parent
@@ -79,7 +79,7 @@ func newProfilesCreateCmd(profiles *profile.Store) *cobra.Command {
 	}
 }
 
-func newProfilesRunCmd(profiles *profile.Store, images *vm.ImageStore, vmProviders map[string]vm.VMProvider, vaultSecret string) *cobra.Command {
+func newProfilesRunCmd(profiles *profile.Store, images *vm.ImageStore, vmProviders map[string]vm.VMProvider, imageProviders map[string]vm.ImageProvider, vaultSecret string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "run <profile>",
 		Short: "Start a sandbox session and open an SSH connection",
@@ -94,6 +94,20 @@ func newProfilesRunCmd(profiles *profile.Store, images *vm.ImageStore, vmProvide
 			provider, ok := vmProviders[spec.Infrastructure.Provider]
 			if !ok {
 				return fmt.Errorf("provider %q not configured — check environment variables", spec.Infrastructure.Provider)
+			}
+
+			if _, err := images.GetImageID(vm.Provider(spec.Infrastructure.Provider), name); err != nil {
+				imageProvider, ok := imageProviders[spec.Infrastructure.Provider]
+				if !ok {
+					return fmt.Errorf("image provider %q not configured — check environment variables", spec.Infrastructure.Provider)
+				}
+				fmt.Printf("No image found for profile %q, building now...\n", name)
+				b := builder.New("vm", images, map[string]vm.ImageProvider{spec.Infrastructure.Provider: imageProvider})
+				snapshotID, err := b.Build(context.Background(), spec)
+				if err != nil {
+					return fmt.Errorf("auto-build: %w", err)
+				}
+				fmt.Printf("Build complete: %s\n", snapshotID)
 			}
 
 			vaultData, err := loadOrInitVault(name, vaultSecret)
