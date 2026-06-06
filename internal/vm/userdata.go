@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/duck-labs/agentsdx/internal/claudecreds"
+	"github.com/duck-labs/agentsdx/internal/opencodecreds"
 	"github.com/duck-labs/agentsdx/internal/types"
 )
 
@@ -15,7 +16,7 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 
 	var extraEnv strings.Builder
 	for k, v := range secrets {
-		if k == claudecreds.VaultKey {
+		if k == claudecreds.VaultKey || k == opencodecreds.VaultKey {
 			continue
 		}
 		fmt.Fprintf(&extraEnv, "      %s=%s\n", k, v)
@@ -32,14 +33,15 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 		fmt.Fprintf(&cloneCmds, "  - su - ubuntu -c \"git clone %s %s\"\n", cloneURL, proj.Path)
 	}
 
-	var claudeWriteFiles strings.Builder
-	var claudeRuncmds strings.Builder
+	var agentWriteFiles strings.Builder
+	var agentRuncmds strings.Builder
+
 	if rawCreds, ok := secrets[claudecreds.VaultKey]; ok && rawCreds != "" {
 		encodedCreds := base64.StdEncoding.EncodeToString([]byte(rawCreds))
 		claudeJSON := `{"hasCompletedOnboarding":true,"numStartups":1,"installMethod":"native","autoUpdates":false}`
 		encodedClaudeJSON := base64.StdEncoding.EncodeToString([]byte(claudeJSON))
 
-		fmt.Fprintf(&claudeWriteFiles, `  - path: /home/ubuntu/.claude/.credentials.json
+		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.claude/.credentials.json
     owner: 'ubuntu:ubuntu'
     permissions: '0600'
     encoding: b64
@@ -51,7 +53,20 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
     content: %s
 `, encodedCreds, encodedClaudeJSON)
 
-		claudeRuncmds.WriteString("  - mkdir -p /home/ubuntu/.claude && chown -R ubuntu:ubuntu /home/ubuntu/.claude\n")
+		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.claude && chown -R ubuntu:ubuntu /home/ubuntu/.claude\n")
+	}
+
+	if rawCfg, ok := secrets[opencodecreds.VaultKey]; ok && rawCfg != "" {
+		encodedCfg := base64.StdEncoding.EncodeToString([]byte(rawCfg))
+
+		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.config/opencode/config.json
+    owner: 'ubuntu:ubuntu'
+    permissions: '0600'
+    encoding: b64
+    content: %s
+`, encodedCfg)
+
+		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.config/opencode && chown -R ubuntu:ubuntu /home/ubuntu/.config/opencode\n")
 	}
 
 	return fmt.Sprintf(`#cloud-config
@@ -69,7 +84,7 @@ write_files:
       AGENTSDX_PROFILE=%s
 %s%sruncmd:
   - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-%s%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), claudeWriteFiles.String(), claudeRuncmds.String(), cloneCmds.String())
+%s%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), agentWriteFiles.String(), agentRuncmds.String(), cloneCmds.String())
 }
 
 func injectToken(repoURL, token string) string {
