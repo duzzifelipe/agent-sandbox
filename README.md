@@ -38,9 +38,8 @@ agentsdx wraps every agent session in a fresh, isolated QEMU VM. Your agent gets
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | 1.21+ | [go.dev/dl](https://go.dev/dl) |
+| Go | 1.21+ | use [`mise`](https://mise.jdx.dev) for setting up the env |
 | QEMU | latest | `brew install qemu` — includes `qemu-system-aarch64`, `qemu-img`, and HVF acceleration |
-| Claude Code | latest | `npm install -g @anthropic-ai/claude-code && claude login` (if using the `claude` agent) |
 
 ---
 
@@ -57,7 +56,7 @@ Produces `dist/agentsdx`.
 ### 2. Set your vault secret
 
 ```bash
-export AGENTSDX_VAULT_SECRET="$(openssl rand -hex 32)"
+echo "\nAGENTSDX_VAULT_SECRET=$(openssl rand -hex 32)" >> .env
 ```
 
 Store this safely — you cannot recover vault data without it.
@@ -70,23 +69,7 @@ Store this safely — you cannot recover vault data without it.
 
 Prompts for a name, base OS image, tooling, and agent (claude / opencode / hermes).
 
-### 4. Add repositories
-
-```bash
-./dist/agentsdx profiles repo add <profile> <repo-url> [path]
-```
-
-Optional `--auth-token-env <SECRET_KEY>` if the repo needs an auth token from the vault.
-
-### 5. Import credentials
-
-```bash
-./dist/agentsdx secrets import-from-claude <profile>
-```
-
-Reads Claude Code credentials from this machine and stores them encrypted in the vault.
-
-### 6. Build the image
+### 4. Build the image
 
 ```bash
 ./dist/agentsdx profiles build <profile>
@@ -94,7 +77,34 @@ Reads Claude Code credentials from this machine and stores them encrypted in the
 
 Boots a temporary QEMU VM, provisions it over SSH with the profile's tooling and agent, then snapshots it. Takes ~5–10 min on first run.
 
-### 7. Run a session
+### 4. Add Secrets
+
+```bash
+./dist/agentsdx secrets add <profile> <secret-name>
+```
+
+You can use, for example to set a scoped Github PAT key (like `GITHUB_SECRET_KEY`) to pull/push your repo.
+
+### 6. Add repositories
+
+```bash
+./dist/agentsdx profiles repo add <profile> <repo-url> [path]
+```
+
+Optional `--auth-token-env <GITHUB_SECRET_KEY>` if the repo needs an auth token from the vault.
+
+### 7. Import credentials (optional)
+
+```bash
+./dist/agentsdx secrets import-from-claude <profile>
+```
+
+Reads Claude Code credentials from your machine and stores them encrypted in the vault. When you run new a session, it automatically set up Claude's credentials.
+
+> Since this method doesn't update the refreshToken, you would probably need to run it periodically to ensure new sessions receive a valid token from your machine.
+
+
+### 8. Run a session
 
 ```bash
 ./dist/agentsdx profiles run <profile>
