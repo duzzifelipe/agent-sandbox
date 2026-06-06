@@ -1,0 +1,13 @@
+[tools]
+go = "1.26.3"
+
+[env]
+_.file = ".env"
+
+[tasks.build]
+description = "Build agentsdx"
+run = "go build -o dist/agentsdx ./cmd/agentsdx"
+
+[tasks.test]
+description = "Run all tests"
+run = "go test -count=1 ./..."
