@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/duck-labs/agentsdx/internal/claudecreds"
 	"github.com/duck-labs/agentsdx/internal/datadir"
 	"github.com/duck-labs/agentsdx/internal/vault"
 )
@@ -19,6 +20,7 @@ func newSecretsCmd(vaultSecret string) *cobra.Command {
 	parent.AddCommand(newSecretsSetCmd(vaultSecret))
 	parent.AddCommand(newSecretsDeleteCmd(vaultSecret))
 	parent.AddCommand(newSecretsListCmd(vaultSecret))
+	parent.AddCommand(newSecretsImportFromClaudeCmd(vaultSecret))
 	return parent
 }
 
@@ -73,6 +75,40 @@ func newSecretsDeleteCmd(vaultSecret string) *cobra.Command {
 				return fmt.Errorf("store vault: %w", err)
 			}
 			fmt.Printf("Secret %q deleted from profile %q.\n", key, profileName)
+			return nil
+		},
+	}
+}
+
+func newSecretsImportFromClaudeCmd(vaultSecret string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "import-from-claude <profile>",
+		Short: "Import Claude Code credentials from this machine into a profile vault",
+		Long: `Reads Claude Code credentials from the local machine (macOS Keychain or
+~/.claude/.credentials.json on Linux) and stores them under the reserved key
+AGENTSDX_CLAUDE_CREDENTIALS in the profile vault. When a sandbox session starts,
+these credentials are automatically injected so Claude Code skips login.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profileName := args[0]
+
+			creds, err := claudecreds.Extract()
+			if err != nil {
+				return fmt.Errorf("extract Claude credentials: %w", err)
+			}
+
+			vd, err := loadOrInitVault(profileName, vaultSecret)
+			if err != nil {
+				return err
+			}
+			if vd.Secrets == nil {
+				vd.Secrets = make(map[string]string)
+			}
+			vd.Secrets[claudecreds.VaultKey] = creds
+			if err := vault.StoreVaultData(datadir.VaultDir(), profileName, vaultSecret, vd); err != nil {
+				return fmt.Errorf("store vault: %w", err)
+			}
+			fmt.Printf("Claude Code credentials stored for profile %q.\n", profileName)
 			return nil
 		},
 	}

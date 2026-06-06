@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/duck-labs/agentsdx/internal/claudecreds"
 	"github.com/duck-labs/agentsdx/internal/types"
 )
 
@@ -14,6 +15,9 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 
 	var extraEnv strings.Builder
 	for k, v := range secrets {
+		if k == claudecreds.VaultKey {
+			continue
+		}
 		fmt.Fprintf(&extraEnv, "      %s=%s\n", k, v)
 	}
 
@@ -26,6 +30,28 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 			}
 		}
 		fmt.Fprintf(&cloneCmds, "  - su - ubuntu -c \"git clone %s %s\"\n", cloneURL, proj.Path)
+	}
+
+	var claudeWriteFiles strings.Builder
+	var claudeRuncmds strings.Builder
+	if rawCreds, ok := secrets[claudecreds.VaultKey]; ok && rawCreds != "" {
+		encodedCreds := base64.StdEncoding.EncodeToString([]byte(rawCreds))
+		claudeJSON := `{"hasCompletedOnboarding":true,"numStartups":1,"installMethod":"native","autoUpdates":false}`
+		encodedClaudeJSON := base64.StdEncoding.EncodeToString([]byte(claudeJSON))
+
+		fmt.Fprintf(&claudeWriteFiles, `  - path: /home/ubuntu/.claude/.credentials.json
+    owner: 'ubuntu:ubuntu'
+    permissions: '0600'
+    encoding: b64
+    content: %s
+  - path: /home/ubuntu/.claude.json
+    owner: 'ubuntu:ubuntu'
+    permissions: '0644'
+    encoding: b64
+    content: %s
+`, encodedCreds, encodedClaudeJSON)
+
+		claudeRuncmds.WriteString("  - mkdir -p /home/ubuntu/.claude && chown -R ubuntu:ubuntu /home/ubuntu/.claude\n")
 	}
 
 	return fmt.Sprintf(`#cloud-config
@@ -41,9 +67,9 @@ write_files:
     permissions: '0600'
     content: |
       AGENTSDX_PROFILE=%s
-%sruncmd:
+%s%sruncmd:
   - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), cloneCmds.String())
+%s%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), claudeWriteFiles.String(), claudeRuncmds.String(), cloneCmds.String())
 }
 
 func injectToken(repoURL, token string) string {
