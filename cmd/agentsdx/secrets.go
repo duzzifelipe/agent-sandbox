@@ -123,11 +123,14 @@ these credentials are automatically injected so Claude Code skips login.`,
 func newSecretsImportFromOpencodeCmd(vaultSecret string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "import-from-opencode <profile>",
-		Short: "Import OpenCode config from this machine into a profile vault",
-		Long: `Reads the OpenCode config from ~/.config/opencode/config.json on the local
-machine and stores it under the reserved key AGENTSDX_OPENCODE_CONFIG in the
-profile vault. When a sandbox session starts, the config is automatically
-injected so OpenCode skips interactive setup.`,
+		Short: "Import OpenCode config, auth, and account from this machine into a profile vault",
+		Long: `Reads OpenCode config (~/.config/opencode/opencode.json), auth credentials
+(~/.local/share/opencode/auth.json), and account info
+(~/.local/share/opencode/account.json) from the local machine and stores them
+under the reserved keys AGENTSDX_OPENCODE_CONFIG, AGENTSDX_OPENCODE_AUTH, and
+AGENTSDX_OPENCODE_ACCOUNT in the profile vault. When a sandbox session starts,
+all files are automatically injected so OpenCode skips interactive setup and has
+API keys ready.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profileName := args[0]
@@ -145,10 +148,24 @@ injected so OpenCode skips interactive setup.`,
 				vd.Secrets = make(map[string]string)
 			}
 			vd.Secrets[opencodecreds.VaultKey] = cfg
+
+			if auth, err := opencodecreds.ExtractAuth(); err == nil && auth != "" {
+				vd.Secrets[opencodecreds.VaultKeyAuth] = auth
+			} else if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not read OpenCode auth (%v)\n", err)
+			}
+
+			if account, err := opencodecreds.ExtractAccount(); err == nil && account != "" {
+				vd.Secrets[opencodecreds.VaultKeyAccount] = account
+			} else if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not read OpenCode account (%v)\n", err)
+			}
+
+			fmt.Printf("OpenCode config, auth, and account stored for profile %q.\n", profileName)
+
 			if err := vault.StoreVaultData(datadir.VaultDir(), profileName, vaultSecret, vd); err != nil {
 				return fmt.Errorf("store vault: %w", err)
 			}
-			fmt.Printf("OpenCode config stored for profile %q.\n", profileName)
 			return nil
 		},
 	}

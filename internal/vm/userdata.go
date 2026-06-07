@@ -16,7 +16,7 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 
 	var extraEnv strings.Builder
 	for k, v := range secrets {
-		if k == claudecreds.VaultKey || k == opencodecreds.VaultKey {
+		if k == claudecreds.VaultKey || k == opencodecreds.VaultKey || k == opencodecreds.VaultKeyAuth || k == opencodecreds.VaultKeyAccount {
 			continue
 		}
 		fmt.Fprintf(&extraEnv, "      %s=%s\n", k, v)
@@ -59,7 +59,7 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 	if rawCfg, ok := secrets[opencodecreds.VaultKey]; ok && rawCfg != "" {
 		encodedCfg := base64.StdEncoding.EncodeToString([]byte(rawCfg))
 
-		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.config/opencode/config.json
+		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.config/opencode/opencode.json
     owner: 'ubuntu:ubuntu'
     permissions: '0600'
     encoding: b64
@@ -67,6 +67,32 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 `, encodedCfg)
 
 		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.config/opencode && chown -R ubuntu:ubuntu /home/ubuntu/.config/opencode\n")
+	}
+
+	if rawAuth, ok := secrets[opencodecreds.VaultKeyAuth]; ok && rawAuth != "" {
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(rawAuth))
+
+		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.local/share/opencode/auth.json
+    owner: 'ubuntu:ubuntu'
+    permissions: '0600'
+    encoding: b64
+    content: %s
+`, encodedAuth)
+
+		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.local/share/opencode && chown -R ubuntu:ubuntu /home/ubuntu/.local/share/opencode\n")
+	}
+
+	if rawAccount, ok := secrets[opencodecreds.VaultKeyAccount]; ok && rawAccount != "" {
+		encodedAccount := base64.StdEncoding.EncodeToString([]byte(rawAccount))
+
+		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.local/share/opencode/account.json
+    owner: 'ubuntu:ubuntu'
+    permissions: '0600'
+    encoding: b64
+    content: %s
+`, encodedAccount)
+
+		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.local/share/opencode && chown -R ubuntu:ubuntu /home/ubuntu/.local/share/opencode\n")
 	}
 
 	return fmt.Sprintf(`#cloud-config
