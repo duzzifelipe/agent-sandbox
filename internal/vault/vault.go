@@ -95,6 +95,13 @@ func GenerateKeyPair() (privateKeyPEM, publicKeyOpenSSH string, err error) {
 	return string(pem.EncodeToMemory(privBlock)), string(ssh.MarshalAuthorizedKey(sshPub)), nil
 }
 
+func DeleteVault(dir, profileName string) error {
+	if err := os.Remove(vaultPath(dir, profileName)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove vault: %w", err)
+	}
+	return nil
+}
+
 func StoreVaultData(dir, profileName, secret string, data types.VaultData) error {
 	plaintext, err := json.Marshal(data)
 	if err != nil {

@@ -70,6 +70,25 @@ func (s *ImageStore) load() (map[string]ImageRecord, error) {
 	return records, nil
 }
 
+func (s *ImageStore) DeleteImage(profileName string) error {
+	records, err := s.load()
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load images: %w", err)
+	}
+	rec, ok := records[profileName]
+	if !ok {
+		return nil
+	}
+	for _, snapshotPath := range rec {
+		os.Remove(snapshotPath)
+	}
+	delete(records, profileName)
+	return s.save(records)
+}
+
 func (s *ImageStore) save(records map[string]ImageRecord) error {
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {

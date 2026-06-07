@@ -70,6 +70,16 @@ func (s *Store) List() ([]types.ProfileSpec, error) {
 	return specs, nil
 }
 
+func (s *Store) Delete(name string) error {
+	if err := os.Remove(s.profilePath(name)); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("profile %q not found", name)
+		}
+		return fmt.Errorf("remove profile: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) AddProject(name string, proj types.ProjectConfig) error {
 	spec, err := s.Get(name)
 	if err != nil {

@@ -32,6 +32,7 @@ func newProfilesCmd(
 	}
 	parent.AddCommand(newProfilesListCmd(profiles))
 	parent.AddCommand(newProfilesCreateCmd(profiles))
+	parent.AddCommand(newProfilesDeleteCmd(profiles, images, vaultSecret))
 	parent.AddCommand(newProfilesRunCmd(profiles, images, vmProviders, imageProviders, vaultSecret))
 	parent.AddCommand(newProfilesBuildCmd(profiles, images, imageProviders, vaultSecret))
 	parent.AddCommand(newProfilesRepoCmd(profiles))
@@ -54,7 +55,7 @@ func newProfilesListCmd(profiles *profile.Store) *cobra.Command {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "NAME\tPROVIDER\tAGENT\tPROJECTS")
 			for _, p := range specs {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, p.Infrastructure.Provider, p.Agent.Provider, len(p.Projects))
+				fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, p.Infrastructure.Provider, strings.Join(p.Agent.Providers, ","), len(p.Projects))
 			}
 			return w.Flush()
 		},
@@ -74,6 +75,47 @@ func newProfilesCreateCmd(profiles *profile.Store) *cobra.Command {
 				return fmt.Errorf("create profile: %w", err)
 			}
 			fmt.Printf("Profile %q created.\n", spec.Name)
+			return nil
+		},
+	}
+}
+
+func newProfilesDeleteCmd(profiles *profile.Store, images *vm.ImageStore, vaultSecret string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <profile>",
+		Short: "Delete a profile, its secrets, and its image snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+
+			_, err := profiles.Get(name)
+			if err != nil {
+				return err
+			}
+
+			confirm := false
+			if err := survey.AskOne(&survey.Confirm{
+				Message: fmt.Sprintf("Delete profile %q, its secrets, and its image snapshot?", name),
+			}, &confirm); err != nil {
+				return err
+			}
+			if !confirm {
+				return nil
+			}
+
+			if err := vault.DeleteVault(datadir.VaultDir(), name); err != nil {
+				return fmt.Errorf("delete vault: %w", err)
+			}
+
+			if err := images.DeleteImage(name); err != nil {
+				return fmt.Errorf("delete image: %w", err)
+			}
+
+			if err := profiles.Delete(name); err != nil {
+				return fmt.Errorf("delete profile: %w", err)
+			}
+
+			fmt.Printf("Profile %q deleted.\n", name)
 			return nil
 		},
 	}
