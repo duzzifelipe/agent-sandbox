@@ -1,27 +1,28 @@
 # agentsdx
 
-**Ephemeral VMs for AI coding agents.**
-
-agentsdx wraps every agent session in a fresh, isolated QEMU VM. Your agent gets a clean environment on every run; credentials and session state are encrypted at rest and restored automatically when a new session starts.
+Turn AI coding agents into ephemeral, sandboxed VMs.
 
 ```
-┌─ your machine ──────────────────────────────────────────────────┐
-│                                                                 │
-│   agentsdx profiles run work-backend                           │
-│       │                                                         │
-│       ▼                                                         │
-│   downloads base image → creates overlay → boots QEMU VM       │
-│   ┌─ VM (ephemeral) ──────────────────────────────────────┐    │
-│   │  secrets injected → repos cloned → agent launched     │    │
-│   │                                                        │    │
-│   │  $ claude / opencode / hermes            ◄── you      │    │
-│   │                                                        │    │
-│   │  [session ends] → VM destroyed                         │    │
-│   └────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+agentsdx profiles run work-backend
+  └── boots QEMU VM → injects secrets → clones repos → launches agent
+  └── [session ends] → VM destroyed
 ```
 
 > **Status:** MVP — single-user, self-hosted, QEMU + macOS/Apple Silicon.
+
+---
+
+## Why VMs instead of containers?
+
+I started this project with Docker containers. Containers on macOS already run inside a Linux VM if you're using Docker Desktop, so I figured: why not just use that VM directly?
+
+**Containers share the host kernel** — a container breakout or a malicious `--privileged` flag compromises the entire environment. Docker Desktop also uses a hypervisor-managed VM, but you don't control it, and **Docker Desktop's business license** is restrictive for commercial use (requires a paid subscription for teams of any size).
+
+A dedicated QEMU VM gives you:
+- **Real isolation** — separate kernel, separate memory, no shared surfaces
+- **Full control** — you own the base image, the provisioning, the lifecycle
+- **No licensing surprises** — QEMU is pure open source (GPL)
+- **Deterministic teardown** — session ends, VM is destroyed, nothing persists
 
 ---
 
@@ -30,7 +31,7 @@ agentsdx wraps every agent session in a fresh, isolated QEMU VM. Your agent gets
 1. **Profiles** describe a sandbox: base OS, tooling (mise, docker, gh…), repos, and which agent to run.
 2. **Images** are built once per profile — a QEMU VM is booted, provisioned over SSH, then snapshotted.
 3. **Sessions** create a copy-on-write overlay of the snapshot, boot it via QEMU, and inject your encrypted secrets and SSH keys via cloud-init before handing control to the agent.
-4. **Vault** stores encrypted secrets (including Claude credentials) per-profile so the next session picks up where you left off.
+4. **Vault** stores encrypted secrets (including Claude / OpenCode credentials) per-profile so the next session picks up where you left off.
 
 ---
 
@@ -77,7 +78,7 @@ Prompts for a name, base OS image, tooling, and agent (claude / opencode / herme
 
 Boots a temporary QEMU VM, provisions it over SSH with the profile's tooling and agent, then snapshots it. Takes ~5–10 min on first run.
 
-### 4. Add Secrets
+### 5. Add secrets
 
 ```bash
 ./dist/agentsdx secrets add <profile> <secret-name>
@@ -95,14 +96,23 @@ Optional `--auth-token-env <GITHUB_SECRET_KEY>` if the repo needs an auth token 
 
 ### 7. Import credentials (optional)
 
+Claude Code:
+
 ```bash
 ./dist/agentsdx secrets import-from-claude <profile>
 ```
 
-Reads Claude Code credentials from your machine and stores them encrypted in the vault. When you run new a session, it automatically set up Claude's credentials.
+Reads Claude Code credentials from your machine and stores them encrypted in the vault. When you start a new session, credentials are injected automatically.
 
-> Since this method doesn't update the refreshToken, you would probably need to run it periodically to ensure new sessions receive a valid token from your machine.
+OpenCode:
 
+```bash
+./dist/agentsdx secrets import-from-opencode <profile>
+```
+
+Reads OpenCode config, auth, and account files from your machine and stores them encrypted in the vault.
+
+> Since neither method updates refresh tokens automatically, run these periodically to ensure new sessions receive valid tokens.
 
 ### 8. Run a session
 
@@ -119,6 +129,7 @@ Boots the VM from the snapshot and drops you into the agent. The VM is destroyed
 ```
 agentsdx profiles list                           list profiles
 agentsdx profiles create                         create a new profile (interactive)
+agentsdx profiles delete <profile>               delete a profile, its secrets, and its image
 agentsdx profiles build <profile>                build a VM image for a profile
 agentsdx profiles run <profile>                  start a session
 agentsdx profiles repo add <profile> <url>       add a repository to a profile
@@ -127,6 +138,7 @@ agentsdx secrets list <profile>                  list secret key names
 agentsdx secrets set <profile> <KEY>             set or overwrite a secret
 agentsdx secrets delete <profile> <KEY>          remove a secret
 agentsdx secrets import-from-claude <profile>    import Claude Code credentials
+agentsdx secrets import-from-opencode <profile>  import OpenCode config, auth, and account
 ```
 
 ### Environment variables
