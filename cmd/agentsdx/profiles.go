@@ -266,11 +266,11 @@ func runWizard() (types.ProfileSpec, error) {
 		return spec, err
 	}
 
-	if err := survey.AskOne(&survey.Select{
-		Message: "Agent:",
+	if err := survey.AskOne(&survey.MultiSelect{
+		Message: "Agents:",
 		Options: []string{"claude", "opencode", "hermes"},
-		Default: "claude",
-	}, &spec.Agent.Provider); err != nil {
+		Default: []string{"claude"},
+	}, &spec.Agent.Providers); err != nil {
 		return spec, err
 	}
 

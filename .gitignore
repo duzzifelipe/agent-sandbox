@@ -10,3 +10,5 @@ server/agentsdxd
 
 # Data directory (runtime state)
 data/
+
+**/.DS_Store

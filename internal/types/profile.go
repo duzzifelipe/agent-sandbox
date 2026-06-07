@@ -20,5 +20,5 @@ type ProjectConfig struct {
 }
 
 type AgentConfig struct {
-	Provider string `yaml:"provider" json:"provider"`
+	Providers []string `yaml:"providers" json:"providers"`
 }

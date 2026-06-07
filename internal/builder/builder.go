@@ -46,7 +46,7 @@ func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string,
 	defer func() { _ = provider.DestroyBuildVM(ctx, buildVM.ID) }()
 
 	scripts := composeScripts(profile)
-	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Provider)
+	orchScript, err := writeOrchestrationScript(scripts, profile.Agent.Providers)
 	if err != nil {
 		return "", fmt.Errorf("write orchestration script: %w", err)
 	}
@@ -77,6 +77,13 @@ func (b *Builder) Build(ctx context.Context, profile types.ProfileSpec) (string,
 	return snapshotID, nil
 }
 
+func firstOrDefault(providers []string, fallback string) string {
+	if len(providers) > 0 {
+		return providers[0]
+	}
+	return fallback
+}
+
 func (b *Builder) sshProvision(ctx context.Context, addr, privKey, vmDir, orchScriptPath string) error {
 	conn, err := dialSSHWithRetry(ctx, addr, privKey)
 	if err != nil {
@@ -97,7 +104,9 @@ func composeScripts(profile types.ProfileSpec) []string {
 	for _, tool := range profile.Infrastructure.Tooling {
 		scripts = append(scripts, fmt.Sprintf("/tmp/agentsdx-vm/tooling/%s/provision.sh", tool))
 	}
-	scripts = append(scripts, fmt.Sprintf("/tmp/agentsdx-vm/agents/%s/provision.sh", profile.Agent.Provider))
+	for _, agent := range profile.Agent.Providers {
+		scripts = append(scripts, fmt.Sprintf("/tmp/agentsdx-vm/agents/%s/provision.sh", agent))
+	}
 	return scripts
 }
 
@@ -110,7 +119,7 @@ cp "/tmp/agentsdx-vm/agents/{{.Agent}}/entrypoint.sh" /usr/local/bin/entrypoint.
 sync
 `
 
-func writeOrchestrationScript(scripts []string, agentProvider string) (string, error) {
+func writeOrchestrationScript(scripts []string, agentProviders []string) (string, error) {
 	f, err := os.CreateTemp("", "agentsdx-orchestrate-*.sh")
 	if err != nil {
 		return "", fmt.Errorf("create temp script: %w", err)
@@ -125,7 +134,7 @@ func writeOrchestrationScript(scripts []string, agentProvider string) (string, e
 	data := struct {
 		Scripts []string
 		Agent   string
-	}{Scripts: scripts, Agent: agentProvider}
+	}{Scripts: scripts, Agent: firstOrDefault(agentProviders, "claude")}
 	if err := tmpl.Execute(f, data); err != nil {
 		f.Close()
 		os.Remove(f.Name())

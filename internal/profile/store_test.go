@@ -18,7 +18,7 @@ func TestCreateAndGet(t *testing.T) {
 			Image:    "ubuntu-24.04",
 			Tooling:  []string{"mise"},
 		},
-		Agent: types.AgentConfig{Provider: "claude"},
+		Agent: types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	if err := s.Create(spec); err != nil {
@@ -38,8 +38,8 @@ func TestList(t *testing.T) {
 	dir := t.TempDir()
 	s := profile.NewStore(dir)
 
-	_ = s.Create(types.ProfileSpec{Name: "a", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Provider: "claude"}})
-	_ = s.Create(types.ProfileSpec{Name: "b", Infrastructure: types.InfrastructureConfig{Provider: "hetzner"}, Agent: types.AgentConfig{Provider: "claude"}})
+	_ = s.Create(types.ProfileSpec{Name: "a", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Providers: []string{"claude"}}})
+	_ = s.Create(types.ProfileSpec{Name: "b", Infrastructure: types.InfrastructureConfig{Provider: "hetzner"}, Agent: types.AgentConfig{Providers: []string{"claude"}}})
 
 	specs, err := s.List()
 	if err != nil {
@@ -53,7 +53,7 @@ func TestList(t *testing.T) {
 func TestCreateDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	s := profile.NewStore(dir)
-	spec := types.ProfileSpec{Name: "dup", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Provider: "claude"}}
+	spec := types.ProfileSpec{Name: "dup", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Providers: []string{"claude"}}}
 	_ = s.Create(spec)
 	if err := s.Create(spec); err == nil {
 		t.Error("expected error on duplicate create")
@@ -71,7 +71,7 @@ func TestGetMissing(t *testing.T) {
 func TestAddProject(t *testing.T) {
 	dir := t.TempDir()
 	s := profile.NewStore(dir)
-	_ = s.Create(types.ProfileSpec{Name: "p", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Provider: "claude"}})
+	_ = s.Create(types.ProfileSpec{Name: "p", Infrastructure: types.InfrastructureConfig{Provider: "local"}, Agent: types.AgentConfig{Providers: []string{"claude"}}})
 
 	proj := types.ProjectConfig{Repo: "https://github.com/example/repo", Path: "~/repo"}
 	if err := s.AddProject("p", proj); err != nil {

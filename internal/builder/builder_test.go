@@ -60,7 +60,7 @@ func TestBuild_StoresSnapshotID(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	got, err := b.Build(context.Background(), profile)
@@ -90,7 +90,7 @@ func TestBuild_DestroysBuildVMOnSuccess(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	if _, err := b.Build(context.Background(), profile); err != nil {
@@ -108,7 +108,7 @@ func TestBuild_CreateBuildVMFailure_ReturnsError(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	_, err := b.Build(context.Background(), profile)
@@ -134,7 +134,7 @@ func TestBuild_ProvisionFailure_DestroysBuildVM(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	_, err := b.Build(context.Background(), profile)
@@ -156,7 +156,7 @@ func TestBuild_ProviderNotConfigured_ReturnsError(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "unknown"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	_, err := b.Build(context.Background(), profile)
@@ -186,7 +186,7 @@ func TestBuild_SSHAddr_UsesSSHPortWhenSet(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	if _, err := b.Build(context.Background(), profile); err != nil {
@@ -213,7 +213,7 @@ func TestBuild_SSHAddr_FallsBackToIPWhenNoSSHPort(t *testing.T) {
 	profile := types.ProfileSpec{
 		Name:           "my-profile",
 		Infrastructure: types.InfrastructureConfig{Image: "ubuntu-24.04", Provider: "local"},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 
 	if _, err := b.Build(context.Background(), profile); err != nil {
@@ -227,7 +227,7 @@ func TestBuild_SSHAddr_FallsBackToIPWhenNoSSHPort(t *testing.T) {
 func TestComposeScripts_BaseOnly(t *testing.T) {
 	profile := types.ProfileSpec{
 		Infrastructure: types.InfrastructureConfig{Tooling: nil},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 	scripts := composeScripts(profile)
 	expected := []string{
@@ -247,7 +247,7 @@ func TestComposeScripts_BaseOnly(t *testing.T) {
 func TestComposeScripts_WithTooling(t *testing.T) {
 	profile := types.ProfileSpec{
 		Infrastructure: types.InfrastructureConfig{Tooling: []string{"mise", "docker"}},
-		Agent:          types.AgentConfig{Provider: "claude"},
+		Agent:          types.AgentConfig{Providers: []string{"claude"}},
 	}
 	scripts := composeScripts(profile)
 	expected := []string{
@@ -267,7 +267,7 @@ func TestComposeScripts_WithTooling(t *testing.T) {
 }
 
 func TestWriteOrchestrationScript_ContainsBashCalls(t *testing.T) {
-	scriptPath, err := writeOrchestrationScript([]string{"/path/one", "/path/two"}, "claude")
+	scriptPath, err := writeOrchestrationScript([]string{"/path/one", "/path/two"}, []string{"claude"})
 	if err != nil {
 		t.Fatalf("writeOrchestrationScript: %v", err)
 	}
