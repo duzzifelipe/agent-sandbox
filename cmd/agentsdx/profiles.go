@@ -261,7 +261,7 @@ func runWizard() (types.ProfileSpec, error) {
 
 	if err := survey.AskOne(&survey.MultiSelect{
 		Message: "Tooling to install:",
-		Options: []string{"mise", "docker", "docker-compose", "gh"},
+		Options: []string{"mise", "docker", "docker-compose", "gh", "vscode"},
 	}, &spec.Infrastructure.Tooling); err != nil {
 		return spec, err
 	}

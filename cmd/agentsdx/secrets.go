@@ -34,7 +34,7 @@ func newSecretsSetCmd(vaultSecret string) *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profileName, key := args[0], args[1]
-			if strings.HasPrefix(key, "AGENTSDX_") {
+			if strings.HasPrefix(key, "AGENTSDX_") && key != "AGENTSDX_VSCODE_TOKEN" && key != "AGENTSDX_VSCODE_PROVIDER" {
 				return fmt.Errorf("key %q is reserved — the AGENTSDX_ prefix is for system-managed secrets", key)
 			}
 			fmt.Fprintf(os.Stderr, "Enter value for %q: ", key)

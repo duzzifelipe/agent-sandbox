@@ -68,7 +68,7 @@ Store this safely — you cannot recover vault data without it.
 ./dist/agentsdx profiles create      # interactive wizard
 ```
 
-Prompts for a name, base OS image, tooling, and agent (claude / opencode / hermes).
+Prompts for a name, base OS image, tooling (mise, docker, gh, vscode, etc.), and agent (claude / opencode / hermes).
 
 ### 4. Build the image
 
@@ -111,6 +111,15 @@ OpenCode:
 ```
 
 Reads OpenCode config, auth, and account files from your machine and stores them encrypted in the vault.
+
+VS Code Tunnel:
+
+```bash
+./dist/agentsdx secrets set <profile> AGENTSDX_VSCODE_TOKEN
+# Paste your GitHub personal access token
+```
+
+Creates a token at https://github.com/settings/tokens (no special scopes required).
 
 > Since neither method updates refresh tokens automatically, run these periodically to ensure new sessions receive valid tokens.
 
