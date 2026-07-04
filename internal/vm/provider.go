@@ -15,10 +15,11 @@ type ImageProvider interface {
 }
 
 type CreateVMRequest struct {
-	ProfileName   string
-	ImageID       string
-	AuthorizedKey string
-	UserData      string
+	ProfileName    string
+	ImageID        string
+	AuthorizedKey  string
+	UserData       string
+	PortForward    []string
 }
 
 type VM struct {

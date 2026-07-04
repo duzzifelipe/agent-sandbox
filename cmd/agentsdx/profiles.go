@@ -274,6 +274,22 @@ func runWizard() (types.ProfileSpec, error) {
 		return spec, err
 	}
 
+	var portForwardRaw string
+	if err := survey.AskOne(&survey.Input{
+		Message: "Port forwarding (comma-separated, format: host:vm):",
+		Help:    "Map host ports to VM ports (e.g., 8080:80,5432:5432)",
+	}, &portForwardRaw); err != nil {
+		return spec, err
+	}
+	if portForwardRaw != "" {
+		for _, m := range strings.Split(portForwardRaw, ",") {
+			m = strings.TrimSpace(m)
+			if m != "" {
+				spec.Infrastructure.PortForward = append(spec.Infrastructure.PortForward, m)
+			}
+		}
+	}
+
 	return spec, nil
 }
 

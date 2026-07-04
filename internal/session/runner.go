@@ -27,6 +27,7 @@ func Run(ctx context.Context, spec types.ProfileSpec, vaultData types.VaultData,
 		spec.Name,
 		vaultData.Secrets,
 		spec.Projects,
+		spec.Infrastructure.PortForward,
 	)
 
 	fmt.Printf("Starting VM for profile %q...\n", spec.Name)
@@ -35,6 +36,7 @@ func Run(ctx context.Context, spec types.ProfileSpec, vaultData types.VaultData,
 		ImageID:       imageID,
 		AuthorizedKey: vaultData.VMAccessPublicKey,
 		UserData:      userData,
+		PortForward:   spec.Infrastructure.PortForward,
 	})
 	if err != nil {
 		return fmt.Errorf("create vm: %w", err)

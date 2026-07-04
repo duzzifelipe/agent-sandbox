@@ -11,7 +11,7 @@ import (
 	"github.com/duck-labs/agentsdx/internal/types"
 )
 
-func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map[string]string, projects []types.ProjectConfig) string {
+func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map[string]string, projects []types.ProjectConfig, portForward []string) string {
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(gitPrivateKey))
 
 	var extraEnv strings.Builder
@@ -85,14 +85,19 @@ func BuildUserData(authorizedKey, gitPrivateKey, profileName string, secrets map
 	if rawAccount, ok := secrets[opencodecreds.VaultKeyAccount]; ok && rawAccount != "" {
 		encodedAccount := base64.StdEncoding.EncodeToString([]byte(rawAccount))
 
-		fmt.Fprintf(&agentWriteFiles, `  - path: /home/ubuntu/.local/share/opencode/account.json
-    owner: 'ubuntu:ubuntu'
-    permissions: '0600'
-    encoding: b64
-    content: %s
-`, encodedAccount)
+		fmt.Fprintf(&agentWriteFiles, "  - path: /home/ubuntu/.local/share/opencode/account.json\n    owner: 'ubuntu:ubuntu'\n    permissions: '0600'\n    encoding: b64\n    content: %s\n", encodedAccount)
 
 		agentRuncmds.WriteString("  - mkdir -p /home/ubuntu/.local/share/opencode && chown -R ubuntu:ubuntu /home/ubuntu/.local/share/opencode\n")
+	}
+
+	var portForwardBlock strings.Builder
+	for _, mapping := range portForward {
+		fmt.Fprintf(&portForwardBlock, "      - %s\n", mapping)
+	}
+
+	var packagesBlock string
+	if len(portForward) > 0 {
+		packagesBlock = fmt.Sprintf("packages:\n  - qemu-guest-agent\nruncmd:\n%s  - apt-get update && apt-get install -y qemu-guest-agent\n  - systemctl start qemu-guest-agent\n", portForwardBlock.String())
 	}
 
 	return fmt.Sprintf(`#cloud-config
@@ -110,7 +115,8 @@ write_files:
       AGENTSDX_PROFILE=%s
 %s%sruncmd:
   - mkdir -p /home/ubuntu/.ssh && chmod 700 /home/ubuntu/.ssh && chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-%s%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), agentWriteFiles.String(), agentRuncmds.String(), cloneCmds.String())
+%s%s
+%s`, authorizedKey, encodedKey, profileName, extraEnv.String(), agentWriteFiles.String(), agentRuncmds.String(), cloneCmds.String(), packagesBlock)
 }
 
 func injectToken(repoURL, token string) string {

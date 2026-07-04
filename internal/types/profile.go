@@ -8,9 +8,10 @@ type ProfileSpec struct {
 }
 
 type InfrastructureConfig struct {
-	Provider string   `yaml:"provider" json:"provider"`
-	Image    string   `yaml:"image"    json:"image"`
-	Tooling  []string `yaml:"tooling"  json:"tooling"`
+	Provider    string     `yaml:"provider"    json:"provider"`
+	Image       string     `yaml:"image"       json:"image"`
+	Tooling     []string   `yaml:"tooling"     json:"tooling"`
+	PortForward []string   `yaml:"port_forward" json:"port_forward"`
 }
 
 type ProjectConfig struct {

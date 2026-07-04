@@ -20,6 +20,18 @@ import (
 	"github.com/google/uuid"
 )
 
+func generateNetdevArgs(sshPort int, portForward []string) string {
+	var netdevArgs strings.Builder
+	netdevArgs.WriteString(fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", sshPort))
+
+	for _, mapping := range portForward {
+		netdevArgs.WriteString(",")
+		netdevArgs.WriteString(mapping)
+	}
+
+	return netdevArgs.String()
+}
+
 var knownImages = map[string]string{
 	"ubuntu-24.04": "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img",
 	"ubuntu-22.04": "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-arm64.img",
@@ -259,7 +271,7 @@ func (p *LocalProvider) CreateVM(ctx context.Context, req CreateVMRequest) (*VM,
 		"-drive", fmt.Sprintf("if=virtio,format=qcow2,file=%s", overlayPath),
 		"-drive", fmt.Sprintf("if=virtio,format=raw,file=%s", seedISO),
 		"-device", "virtio-net-pci,netdev=net0",
-		"-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", port),
+		"-netdev", generateNetdevArgs(port, req.PortForward),
 		"-pidfile", pidFile,
 	); err != nil {
 		cleanup()
